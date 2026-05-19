@@ -1,0 +1,8 @@
+{
+  "name": "NutriZen",
+  "description": "Premium local-first nutrition operating system with glassmorphism UI and advanced health intelligence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
