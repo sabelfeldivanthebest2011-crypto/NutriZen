@@ -65,14 +65,93 @@ export const Onboarding: React.FC = () => {
       title: lang === 'en' ? 'Current Weight' : 'Текущий вес',
       subtitle: lang === 'en' ? 'Swipe to set your current weight' : 'Используйте слайдер для выбора веса',
       component: (
-        <div className="mt-12">
+        <div className="mt-12 text-zinc-950 font-display">
           <WeightSlider 
-            label="Weight (kg)" 
+            label={lang === 'en' ? 'Current Weight (kg)' : 'Текущий вес (кг)'} 
             min={30} 
             max={250} 
             value={profile.weight} 
             onChange={(v) => setProfile({ weight: v })} 
+            step={0.1}
+            isDark={false}
           />
+        </div>
+      )
+    },
+    {
+      id: 'targetWeight',
+      title: lang === 'en' ? 'Target Weight' : 'Желаемый вес',
+      subtitle: lang === 'en' ? 'Swipe to set your ideal target weight' : 'Используйте слайдер для выбора желаемого веса',
+      component: (
+        <div className="mt-12 text-zinc-950 font-display">
+          <WeightSlider 
+            label={lang === 'en' ? 'Target Weight (kg)' : 'Желаемый вес (кг)'} 
+            min={30} 
+            max={250} 
+            value={profile.targetWeight || 70} 
+            onChange={(v) => setProfile({ targetWeight: v })} 
+            step={0.1}
+            isDark={false}
+          />
+        </div>
+      )
+    },
+    {
+      id: 'weightChangeRate',
+      title: lang === 'en' ? 'Weight Change Rate' : 'Скорость изменения веса',
+      subtitle: lang === 'en' ? 'Choose your weekly pacing rate' : 'Выберите желаемую еженедельную скорость',
+      component: (
+        <div className="mt-12 space-y-6">
+          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
+            {lang === 'en' ? 'Weekly Rate (grams / week)' : 'Скорость в неделю (грамм / нед)'}
+          </label>
+          <WheelPicker 
+            options={[100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]} 
+            value={Math.round((profile.speedKgsPerWeek || 0.25) * 1000)} 
+            onChange={(v) => setProfile({ speedKgsPerWeek: Number(v) / 1000 })} 
+            height={180}
+          />
+          <div className="p-8 bg-zinc-50 rounded-[2.5rem] border border-black/5 flex items-center justify-between text-zinc-800 font-bold">
+            <span className="text-[10px] text-zinc-400 uppercase tracking-widest">
+              {lang === 'en' ? 'Monthly Target' : 'Цель в месяц'}
+            </span>
+            <span className="text-xl text-black">
+              {Math.round((profile.speedKgsPerWeek || 0.25) * 1000 * 4.345)} {lang === 'en' ? 'grams/month' : 'грамм/мес'}
+            </span>
+          </div>
+        </div>
+      )
+    },
+    {
+      id: 'proteinIntake',
+      title: lang === 'en' ? 'Protein Intake Target' : 'Норма потребления белка',
+      subtitle: lang === 'en' ? 'Choose protein grams per 1 kg of body weight' : 'Выберите граммы белка на 1 кг массы тела',
+      component: (
+        <div className="mt-12 space-y-6">
+          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
+            {lang === 'en' ? 'Protein Coefficient (g/kg)' : 'Коэффициент белка (г/кг)'}
+          </label>
+          <WheelPicker 
+            options={[1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0]} 
+            value={profile.proteinPerKg || 2.0} 
+            onChange={(v) => setProfile({ proteinPerKg: Number(v) })} 
+            height={180}
+          />
+          <div className="p-8 bg-zinc-50 rounded-[2.5rem] border border-black/5 flex flex-col gap-2">
+             <div className="flex justify-between items-center text-zinc-800 font-bold">
+               <span className="text-[10px] text-zinc-400 uppercase tracking-widest">
+                 {lang === 'en' ? 'Calculated Daily Protein' : 'Рассчитанный суточный белок'}
+               </span>
+               <span className="text-xl text-black font-display font-black">
+                 {Math.round((profile.weight || 70) * (profile.proteinPerKg || 2.0))}g
+               </span>
+             </div>
+             <p className="text-[11px] text-zinc-400 font-bold uppercase tracking-wider leading-relaxed">
+               {lang === 'en' 
+                 ? 'Active: 1.6–2.2 g/kg. Strength athletes: 2.0–2.4 g/kg.' 
+                 : 'Активный образ жизни: 1.6–2.2 г/кг. Силовые тренировки: 2.0–2.4 г/кг.'}
+             </p>
+          </div>
         </div>
       )
     },

@@ -17,6 +17,7 @@ interface UserProfile {
   workoutsPerWeek: number;
   speedKgsPerWeek: number; 
   trainingType?: 'gym' | 'calisthenics' | 'mixed' | 'none';
+  proteinPerKg?: number;
   trainingFrequency?: number;
   experienceLevel?: 'beginner' | 'intermediate' | 'advanced';
   hasCardio?: boolean;
@@ -45,19 +46,29 @@ interface UserProfile {
 interface AppState {
   isOnboarded: boolean;
   profile: UserProfile;
-  activeTab: 'home' | 'diary' | 'analytics' | 'profile';
+  activeTab: 'home' | 'diary' | 'analytics' | 'profile' | 'library';
   activeDashboardTab: 'nutrition' | 'education';
   lastTDEECorrection: number;
   adaptiveTDEE: number;
   searchHistory: string[];
   recentFoods: any[];
+  user: any;
+  setUser: (user: any) => void;
+  syncInProgress: boolean;
+  setSyncInProgress: (status: boolean) => void;
+  syncError: string | null;
+  setSyncError: (err: string | null) => void;
+  deletedQueue: { table: 'foods' | 'recipes' | 'weights'; id: string | number }[];
+  enqueueDeleted: (table: 'foods' | 'recipes' | 'weights', id: string | number) => void;
+  clearDeletedQueue: () => void;
   setProfile: (profile: Partial<UserProfile>) => void;
   confirmOnboarding: () => Promise<void>;
   addSearchQuery: (query: string) => void;
   clearSearchHistory: () => void;
   removeSearchQuery: (query: string) => void;
   addRecentFood: (food: any) => void;
-  setActiveTab: (tab: 'home' | 'diary' | 'analytics' | 'profile') => void;
+  removeRecentFood: (foodName: string) => void;
+  setActiveTab: (tab: 'home' | 'diary' | 'analytics' | 'profile' | 'library') => void;
   setActiveDashboardTab: (tab: 'nutrition' | 'education') => void;
   updateAdaptiveTDEE: (newTDEE: number) => void;
   setIsOnboarded: (status: boolean) => void;
@@ -94,6 +105,15 @@ export const useStore = create<AppState>()(
       adaptiveTDEE: 2500,
       searchHistory: [],
       recentFoods: [],
+      user: null,
+      setUser: (user) => set({ user }),
+      syncInProgress: false,
+      setSyncInProgress: (syncInProgress) => set({ syncInProgress }),
+      syncError: null,
+      setSyncError: (syncError) => set({ syncError }),
+      deletedQueue: [],
+      enqueueDeleted: (table, id) => set((state) => ({ deletedQueue: [...state.deletedQueue, { table, id }] })),
+      clearDeletedQueue: () => set({ deletedQueue: [] }),
       profile: {
         name: '',
         goal: 'maintain',
@@ -106,6 +126,7 @@ export const useStore = create<AppState>()(
         stepsPerDay: 5000,
         workoutsPerWeek: 3,
         speedKgsPerWeek: 0,
+        proteinPerKg: 2.0,
         bodyFat: 15,
         lifestyle: 'sedentary',
         macroPreference: 'balanced',
@@ -155,6 +176,9 @@ export const useStore = create<AppState>()(
         const current = get().recentFoods;
         const filtered = current.filter(f => f.name !== food.name || f.brand !== food.brand);
         set({ recentFoods: [food, ...filtered].slice(0, 15) });
+      },
+      removeRecentFood: (foodName) => {
+        set({ recentFoods: get().recentFoods.filter(f => f.name !== foodName) });
       },
       setActiveTab: (tab) => set({ activeTab: tab }),
       setActiveDashboardTab: (tab) => set({ activeDashboardTab: tab }),
@@ -344,7 +368,8 @@ export const useStore = create<AppState>()(
           sugar = m.sugar;
         } else {
           // Defaults based on goal/weight
-          protein = weight * 2; // Default 2g/kg
+          const ratio = updatedProfile.proteinPerKg || 2.0;
+          protein = weight * ratio; // Custom g/kg or fallback to 2.0g/kg
           fat = weight * 0.8;    // Default 0.8g/kg
           carbs = (targetCalories - (protein * 4) - (fat * 9)) / 4;
           fiber = Math.min(Math.max(updatedProfile.weight * 0.4, 25), 50);

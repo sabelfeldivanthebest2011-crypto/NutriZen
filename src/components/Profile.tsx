@@ -6,6 +6,7 @@ import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from '../db/db';
 import { useTranslation } from '../lib/useTranslation';
+import { supabase } from '../lib/supabase';
 
 export const Profile: React.FC<{ 
   onNavigate?: (view: string) => void, 
@@ -16,8 +17,67 @@ export const Profile: React.FC<{
   const [activeSubTab, setActiveSubTab] = useState<'personal' | 'nutrition' | 'meals'>('personal');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    resetAll();
+  };
+
+  const handleExport = async () => {
+    try {
+      const userProducts = await db.foods.where('type').equals('user').toArray();
+      const recipes = await db.recipes.toArray();
+      const logs = await db.logs.toArray();
+      const weight = await db.weight.toArray();
+      
+      const dump = {
+        version: 2,
+        timestamp: Date.now(),
+        data: { userProducts, recipes, logs, weight, profile }
+      };
+      
+      const blob = new Blob([JSON.stringify(dump, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nutrizen_backup_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const dump = JSON.parse(event.target?.result as string);
+        if (dump.data) {
+           if (dump.data.userProducts?.length) await db.foods.bulkPut(dump.data.userProducts);
+           if (dump.data.recipes?.length) await db.recipes.bulkPut(dump.data.recipes);
+           if (dump.data.logs?.length) await db.logs.bulkPut(dump.data.logs);
+           if (dump.data.weight?.length) await db.weight.bulkPut(dump.data.weight);
+           
+           if (dump.data.profile) {
+             setProfile(dump.data.profile);
+           }
+           
+           alert(lang === 'ru' ? 'Импорт завершен!' : 'Import successful!');
+           window.location.reload();
+        }
+      } catch (err) {
+        alert(lang === 'ru' ? 'Ошибка импорта' : 'Import failed');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleDeleteAll = async () => {
     try {
+      await supabase.auth.signOut();
       db.close();
       await Dexie.delete('NutriZenDB');
       localStorage.clear();
@@ -77,7 +137,7 @@ export const Profile: React.FC<{
                 <DataRow label={t('onboarding.age')} value={profile.age} />
                 <DataRow label={t('onboarding.gender')} value={t(`onboarding.gender_${profile.gender}`)} />
                 <DataRow label={t('onboarding.height')} value={`${profile.height} cm`} />
-                <DataRow label={t('onboarding.weight')} value={`${profile.weight} kg`} />
+                <DataRow label={t('onboarding.weight')} value={`${profile.weight.toFixed(1)} kg`} />
                 <DataRow label={t('onboarding.activity_title')} value={t(`onboarding.activity_${profile.activityLevel >= 1.725 ? 'active' : profile.activityLevel >= 1.55 ? 'moderate' : profile.activityLevel >= 1.375 ? 'light' : 'sedentary'}`)} />
                 <DataRow label={t('onboarding.exp_title')} value={t(`onboarding.exp_${profile.experienceLevel || 'beginner'}`)} />
                 <DataRow label={t('onboarding.goal_title')} value={t(`onboarding.goal_${profile.goal}`)} />
@@ -108,6 +168,19 @@ export const Profile: React.FC<{
                 </div>
                 <ChevronRight size={20} className="text-gray-300" />
               </button>
+
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  onClick={handleExport}
+                  className="py-4 px-6 bg-primary-600 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest shadow-lg shadow-primary-200 active:scale-95 transition-all text-center"
+                >
+                  {lang === 'ru' ? 'Экспорт данных' : 'Export Data'}
+                </button>
+                <label className="py-4 px-6 bg-zinc-900 text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-widest cursor-pointer active:scale-95 transition-all text-center">
+                  {lang === 'ru' ? 'Импорт данных' : 'Import Data'}
+                  <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                </label>
+              </div>
             </motion.div>
           )}
 
@@ -162,7 +235,7 @@ export const Profile: React.FC<{
               className="space-y-6"
             >
               <div className="bg-white rounded-[2.5rem] p-4 shadow-sm border border-gray-50 divide-y divide-gray-50">
-                {profile.mealStructure.map((meal) => (
+                {(profile.mealStructure || []).map((meal) => (
                   <div key={meal.id} className="flex justify-between items-center p-5 group">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center text-xl shadow-sm">
@@ -221,6 +294,14 @@ export const Profile: React.FC<{
              {lang === 'en' ? 'RU' : 'EN'}
           </button>
         </div>
+
+        <button 
+          onClick={handleSignOut}
+          className="w-full flex items-center justify-center gap-3 text-zinc-300 font-black text-sm py-5 bg-zinc-900 border border-zinc-800 rounded-[2rem] hover:bg-zinc-850 hover:text-white transition-all active:scale-[0.98] group mb-3"
+        >
+          <LogOut size={20} className="text-zinc-500 group-hover:text-white transition-colors" /> 
+          {lang === 'en' ? 'SIGN OUT' : 'ВЫЙТИ ИЗ АККАУНТА'}
+        </button>
 
         <button 
           onClick={() => setShowDeleteModal(true)}

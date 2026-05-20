@@ -79,6 +79,8 @@ interface WeightSliderProps {
   onChange: (value: number) => void;
   label?: string;
   unit?: string;
+  step?: number;
+  isDark?: boolean;
 }
 
 export const WeightSlider: React.FC<WeightSliderProps> = ({
@@ -87,7 +89,9 @@ export const WeightSlider: React.FC<WeightSliderProps> = ({
   value,
   onChange,
   label,
-  unit = 'kg'
+  unit = 'kg',
+  step,
+  isDark = true,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isReady, setIsReady] = useState(false);
@@ -95,40 +99,60 @@ export const WeightSlider: React.FC<WeightSliderProps> = ({
   // Constants
   const stepWidth = 12; // Width between ticks
   const range = max - min;
-  const step = range > 500 ? 1 : 0.1; // Use 1.0 increments for large ranges like calories (range > 500)
-  const totalSteps = Math.round(range / step);
+  
+  // Decide the step: if explicit step is passed, use it, else default to 0.05 for high precision (or 1 for calibrating large ranges)
+  const actualStep = step !== undefined ? step : (range > 500 ? 1 : 0.05); 
+  const totalSteps = Math.round(range / actualStep);
+
+  const snapToStep = (val: number, stepVal: number): number => {
+    const multiplier = 1 / stepVal;
+    return Math.round(val * multiplier) / multiplier;
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
-      const scrollLeft = ((value - min) / step) * stepWidth;
+      const scrollLeft = ((value - min) / actualStep) * stepWidth;
       scrollRef.current.scrollLeft = scrollLeft;
       setIsReady(true);
     }
-  }, [min, step, stepWidth]); // Added dependencies for safety
+  }, [min, actualStep, stepWidth]); 
 
   const handleScroll = () => {
     if (!scrollRef.current || !isReady) return;
     const scrollLeft = scrollRef.current.scrollLeft;
-    const newValue = min + (scrollLeft / stepWidth) * step;
-    const rounded = Math.round(newValue * (1 / step)) / (1 / step);
-    if (rounded >= min && rounded <= max && rounded !== value) {
-      onChange(rounded);
+    // Calculate raw value based on scroll position
+    const rawValue = min + (scrollLeft / stepWidth) * actualStep;
+    
+    // Snapping to grid precision
+    const rounded = snapToStep(rawValue, actualStep);
+    
+    // Ensure we are within bounds and only trigger change if value actually changed
+    const finalValue = Math.max(min, Math.min(max, rounded));
+    if (Math.abs(finalValue - value) >= (actualStep / 2)) {
+      onChange(finalValue);
     }
   };
+
+  const decimalPlaces = actualStep === 0.05 ? 2 : (actualStep === 1 ? 0 : 1);
 
   return (
     <div className="space-y-4">
       {label && (
         <div className="flex justify-between items-end px-2">
-          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{label}</span>
+          <span className={cn("text-[10px] font-black uppercase tracking-widest", isDark ? "text-zinc-500" : "text-zinc-600")}>{label}</span>
           <div className="flex items-baseline gap-1">
-             <span className="text-3xl font-display font-black text-white">{step === 1 ? Math.round(value) : value.toFixed(1)}</span>
-             <span className="text-xs font-bold text-zinc-500">{unit}</span>
+             <span className={cn("text-3xl font-display font-black", isDark ? "text-white" : "text-zinc-950")}>
+               {actualStep === 1 ? Math.round(value) : value.toFixed(decimalPlaces)}
+             </span>
+             <span className={cn("text-xs font-bold", isDark ? "text-zinc-500" : "text-zinc-600")}>{unit}</span>
           </div>
         </div>
       )}
       
-      <div className="relative h-24 overflow-hidden bg-zinc-900/40 rounded-[2rem] border border-white/5">
+      <div className={cn(
+        "relative h-24 overflow-hidden rounded-[2rem] border",
+        isDark ? "bg-zinc-900/40 border-white/5" : "bg-zinc-200/50 border-black/5"
+      )}>
         {/* Center Indicator */}
         <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-0.5 bg-primary-500 z-10 shadow-[0_0_15px_rgba(34,197,94,0.5)]" />
         
@@ -139,27 +163,33 @@ export const WeightSlider: React.FC<WeightSliderProps> = ({
           style={{ paddingLeft: '50%', paddingRight: '50%' }}
         >
           <div className="flex items-end gap-0" style={{ width: totalSteps * stepWidth }}>
-             {Array.from({ length: totalSteps + 1 }).map((_, i) => {
-               const val = min + i * step;
-               const isMajor = range > 500 ? i % 100 === 0 : i % 10 === 0;
-               const isMid = range > 500 ? i % 50 === 0 : i % 5 === 0;
-               
-               return (
-                 <div 
-                   key={i} 
-                   className="flex flex-col items-center flex-shrink-0 snap-center"
-                   style={{ width: stepWidth }}
-                 >
-                    {isMajor && (
-                      <span className="text-[9px] font-black text-zinc-600 mb-2">{Math.round(val)}</span>
-                    )}
-                    <div className={cn(
-                      "w-0.5 rounded-full transition-colors",
-                      isMajor ? "h-6 bg-zinc-400" : isMid ? "h-4 bg-zinc-600" : "h-2 bg-zinc-800"
-                    )} />
-                 </div>
-               );
-             })}
+              {Array.from({ length: totalSteps + 1 }).map((_, i) => {
+                const val = min + i * actualStep;
+                const isMajor = range > 500 ? i % 100 === 0 : (actualStep === 0.05 ? i % 20 === 0 : i % 10 === 0);
+                const isMid = range > 500 ? i % 50 === 0 : (actualStep === 0.05 ? i % 10 === 0 : i % 5 === 0);
+                
+                return (
+                  <div 
+                    key={i} 
+                    className="flex flex-col items-center flex-shrink-0 snap-center"
+                    style={{ width: stepWidth }}
+                  >
+                     {isMajor && (
+                       <span className={cn("text-[9px] font-black mb-2", isDark ? "text-zinc-600 animate-fadeIn" : "text-zinc-700 animate-fadeIn")}>
+                         {val.toFixed(actualStep === 0.05 ? 1 : 0)}
+                       </span>
+                     )}
+                     <div className={cn(
+                       "w-0.5 rounded-full transition-colors",
+                       isMajor 
+                         ? (isDark ? "h-6 bg-zinc-400" : "h-6 bg-zinc-700") 
+                         : isMid 
+                           ? (isDark ? "h-4 bg-zinc-600" : "h-4 bg-zinc-500") 
+                           : (isDark ? "h-2 bg-zinc-800" : "h-2 bg-zinc-300")
+                     )} />
+                  </div>
+                );
+              })}
           </div>
         </div>
       </div>

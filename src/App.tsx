@@ -10,8 +10,13 @@ import { GoalsEditor } from './components/GoalsEditor';
 import { MealStructureSettings } from './components/MealStructureSettings';
 import { WeightMiniBook } from './components/WeightMiniBook';
 import { Navigation } from './components/Navigation';
+import { FoodSearchModal } from './components/FoodSearchModal';
 import { seedDatabase } from './db/db';
 import { motion, AnimatePresence } from 'motion/react';
+import { supabase } from './lib/supabase';
+import { AuthUI } from './components/Auth';
+import { syncData } from './lib/sync';
+import { Loader2 } from 'lucide-react';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -51,12 +56,44 @@ class ErrorBoundary extends Component<any, any> {
 }
 
 export default function App() {
-  const { isOnboarded, activeTab, setActiveTab, profile } = useStore();
+  const { isOnboarded, activeTab, setActiveTab, profile, user, setUser } = useStore();
   const [subView, setSubView] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
     seedDatabase();
-  }, []);
+
+    // Check active session and initialize
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+      if (session?.user) {
+        syncData();
+      }
+    });
+
+    // Setup listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+      if (session?.user) {
+        syncData();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [setUser]);
+
+  // Handle background auto-sync when online
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(() => {
+      syncData();
+    }, 60000); // 60s background sync
+    return () => clearInterval(interval);
+  }, [user]);
 
   // Notification Logic
   useEffect(() => {
@@ -82,6 +119,19 @@ export default function App() {
 
     return () => clearInterval(checkInterval);
   }, [profile.notificationsEnabled, profile.mealStructure]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#070708] flex flex-col items-center justify-center p-8 text-center text-zinc-100">
+        <Loader2 className="animate-spin text-emerald-500 mb-4" size={32} />
+        <p className="text-xs uppercase tracking-widest font-black text-zinc-500">Initializing Core Intel...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthUI />;
+  }
 
   if (!isOnboarded) {
     return <Onboarding />;
@@ -162,6 +212,24 @@ export default function App() {
                 transition={{ duration: 0.2 }}
               >
                 <Profile onNavigate={setSubView} setActiveTab={setActiveTab} />
+              </motion.div>
+            )}
+            {activeTab === 'library' && (
+              <motion.div
+                key="library"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                 <div className="fixed inset-0 z-[50] bg-white">
+                    <FoodSearchModal 
+                       onClose={() => setActiveTab('diary')} 
+                       mealType="library" 
+                       initialTab="my-food"
+                       initialSubTab="favorites"
+                    />
+                 </div>
               </motion.div>
             )}
           </AnimatePresence>

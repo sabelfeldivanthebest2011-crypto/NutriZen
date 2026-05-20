@@ -81,22 +81,40 @@ export const Dashboard: React.FC<{ onNavigate?: (view: string) => void }> = ({ o
   const totals = useMemo(() => {
     const base = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, cholesterol: 0, b12: 0, calcium: 0, zinc: 0, vitD: 0, magnesium: 0, iron: 0, potassium: 0 };
     if (!todayLogs) return base;
-    return todayLogs.reduce((acc, log) => ({
-      calories: acc.calories + (log.calories * (log.amount / 100)),
-      protein: acc.protein + (log.protein * (log.amount / 100)),
-      carbs: acc.carbs + (log.carbs * (log.amount / 100)),
-      fat: acc.fat + (log.fat * (log.amount / 100)),
-      fiber: acc.fiber + (log.fiber * (log.amount / 100)),
-      sugar: acc.sugar + (log.sugar * (log.amount / 100)),
-      cholesterol: acc.cholesterol + ((log.cholesterol || 0) * (log.amount / 100)),
-      b12: acc.b12 + ((log.b12 || 0) * (log.amount / 100)),
-      calcium: acc.calcium + ((log.calcium || 0) * (log.amount / 100)),
-      zinc: acc.zinc + ((log.zinc || 0) * (log.amount / 100)),
-      vitD: acc.vitD + ((log.vitD || 0) * (log.amount / 100)),
-      magnesium: acc.magnesium + ((log.magnesium || 0) * (log.amount / 100)),
-      iron: acc.iron + ((log.iron || 0) * (log.amount / 100)),
-      potassium: acc.potassium + ((log.potassium || 0) * (log.amount / 100)),
-    }), base);
+    return (todayLogs as any[]).reduce((acc, log) => {
+      const nuts = log.nutrients || {
+        calories: (log.calories || 0) * ((log.amount || 100) / 100),
+        protein: (log.protein || 0) * ((log.amount || 100) / 100),
+        carbs: (log.carbs || 0) * ((log.amount || 100) / 100),
+        fat: (log.fat || 0) * ((log.amount || 100) / 100),
+        fiber: (log.fiber || 0) * ((log.amount || 100) / 100),
+        sugar: (log.sugar || 0) * ((log.amount || 100) / 100),
+        cholesterol_mg: (log.cholesterol || 0) * ((log.amount || 100) / 100),
+        vitamin_b12_mcg: (log.b12 || 0) * ((log.amount || 100) / 100),
+        calcium_mg: (log.calcium || 0) * ((log.amount || 100) / 100),
+        zinc_mg: (log.zinc || 0) * ((log.amount || 100) / 100),
+        vitamin_d_mcg: (log.vitD || 0) * ((log.amount || 100) / 100),
+        magnesium_mg: (log.magnesium || 0) * ((log.amount || 100) / 100),
+        iron_mg: (log.iron || 0) * ((log.amount || 100) / 100),
+        potassium_mg: (log.potassium || 0) * ((log.amount || 100) / 100),
+      };
+      return {
+        calories: acc.calories + (nuts.calories || 0),
+        protein: acc.protein + (nuts.protein || 0),
+        carbs: acc.carbs + (nuts.carbs || 0),
+        fat: acc.fat + (nuts.fat || 0),
+        fiber: acc.fiber + (nuts.fiber || 0),
+        sugar: acc.sugar + (nuts.sugar || 0),
+        cholesterol: acc.cholesterol + (nuts.cholesterol_mg || 0),
+        b12: acc.b12 + (nuts.vitamin_b12_mcg || 0),
+        calcium: acc.calcium + (nuts.calcium_mg || 0),
+        zinc: acc.zinc + (nuts.zinc_mg || 0),
+        vitD: acc.vitD + (nuts.vitamin_d_mcg || 0),
+        magnesium: acc.magnesium + (nuts.magnesium_mg || 0),
+        iron: acc.iron + (nuts.iron_mg || 0),
+        potassium: acc.potassium + (nuts.potassium_mg || 0),
+      };
+    }, base);
   }, [todayLogs]);
 
   const greeting = useMemo(() => {
@@ -329,6 +347,30 @@ export const Dashboard: React.FC<{ onNavigate?: (view: string) => void }> = ({ o
                 </div>
                 <Zap size={20} className="text-amber-500 relative z-10" />
               </button>
+            </section>
+
+            <section className="p-8 bg-zinc-950 rounded-[3rem] text-white space-y-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-primary-600/10 rounded-full blur-[80px]" />
+              <h3 className="text-xl font-display font-black flex items-center gap-2 relative z-10">
+                <Info className="text-primary-500" /> {lang === 'en' ? 'How to use NutriZen' : 'Как пользоваться NutriZen'}
+              </h3>
+              <ul className="space-y-4 relative z-10">
+                {[
+                  { en: 'Type product in search', ru: 'Введите продукт в поиск' },
+                  { en: 'Use Enter for advanced mode', ru: 'Используйте Enter для открытия расширенного режима' },
+                  { en: 'Add products to diary', ru: 'Добавляйте продукты в дневник питания' },
+                  { en: 'Create custom products', ru: 'Создавайте собственные продукты' },
+                  { en: 'Create recipes', ru: 'Создавайте рецепты из продуктов' },
+                  { en: 'Scan barcodes', ru: 'Сканируйте продукты через камеру' },
+                  { en: 'Export to save data', ru: 'Используйте экспорт для сохранения данных' },
+                  { en: 'Share recipes as text', ru: 'Копируйте рецепты как текст для обмена' }
+                ].map((item, i) => (
+                  <li key={i} className="flex gap-3 text-sm text-zinc-400 font-medium font-sans">
+                    <div className="w-5 h-5 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] text-white flex-shrink-0">{i+1}</div>
+                    {lang === 'en' ? item.en : item.ru}
+                  </li>
+                ))}
+              </ul>
             </section>
 
             <div className="p-8 bg-gray-900 rounded-[3rem] text-white space-y-4">

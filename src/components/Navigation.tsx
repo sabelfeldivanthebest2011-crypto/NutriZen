@@ -1,16 +1,17 @@
 import React from 'react';
-import { Home, Notebook, BarChart2, User } from 'lucide-react';
+import { Home, Notebook, BarChart2, User, BookOpen } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface NavigationProps {
-  activeTab: 'home' | 'diary' | 'analytics' | 'profile';
-  setActiveTab: (tab: 'home' | 'diary' | 'analytics' | 'profile') => void;
+  activeTab: 'home' | 'diary' | 'analytics' | 'profile' | 'library';
+  setActiveTab: (tab: 'home' | 'diary' | 'analytics' | 'profile' | 'library') => void;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
   const tabs = [
     { id: 'home', icon: Home, label: 'Home' },
     { id: 'diary', icon: Notebook, label: 'Diary' },
+    { id: 'library', icon: BookOpen, label: 'Library' },
     { id: 'analytics', icon: BarChart2, label: 'Analytics' },
     { id: 'profile', icon: User, label: 'Profile' },
   ] as const;

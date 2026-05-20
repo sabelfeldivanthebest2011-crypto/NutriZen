@@ -9,6 +9,7 @@ import { TrendingDown, Calendar, Database, Award, Info, AlertTriangle, Check, Za
 import { cn } from '../lib/utils';
 import { useTranslation } from '../lib/useTranslation';
 import { WeightSlider } from './ui/Selectors';
+import { syncData } from '../lib/sync';
 
 const AnalyticsCard: React.FC<{ icon: React.ReactNode, label: string, value: string, desc: string }> = ({ icon, label, value, desc }) => (
   <div className="bg-white p-5 rounded-[2rem] border border-gray-50 shadow-sm transition-all hover:shadow-md">
@@ -22,7 +23,7 @@ const AnalyticsCard: React.FC<{ icon: React.ReactNode, label: string, value: str
 );
 
 const WeightSection: React.FC = () => {
-  const { adaptiveTDEE, updateAdaptiveTDEE, setProfile, profile } = useStore();
+  const { adaptiveTDEE, updateAdaptiveTDEE, setProfile, profile, enqueueDeleted } = useStore();
   const { t } = useTranslation();
   const [isLogging, setIsLogging] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -62,7 +63,7 @@ const WeightSection: React.FC = () => {
       return {
         name: format(new Date(d.ts), 'MMM dd'),
         weight: Number(avgWeight.toFixed(1)),
-        ma: Number(ma.toFixed(2)),
+        ma: Number(ma.toFixed(1)),
         timestamp: d.ts
       };
     });
@@ -81,6 +82,9 @@ const WeightSection: React.FC = () => {
     
     setEditingLog(null);
 
+    // Trigger cloud synchronization
+    syncData();
+
     // Adaptive logic (only for current/recent logs)
     if (weightData.length >= 4) {
        const firstWeight = weightData[0].weight;
@@ -92,8 +96,10 @@ const WeightSection: React.FC = () => {
   };
 
   const deleteWeight = async (id: number) => {
+    enqueueDeleted('weights', id);
     await db.weight.delete(id);
     setEditingLog(null);
+    syncData(); // background sync trigger
   };
 
   return (
@@ -277,12 +283,13 @@ const WeightSection: React.FC = () => {
                     contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
                     itemStyle={{ fontWeight: 800, fontSize: '12px' }}
                     labelStyle={{ fontWeight: 800, fontSize: '10px', textTransform: 'uppercase', color: '#9CA3AF' }}
+                    formatter={(val: number) => [val.toFixed(1), '']}
                   />
                   <Line 
                     type="monotone" 
                     dataKey="weight" 
                     stroke="#D1D5DB" 
-                    strokeWidth={2}
+                    strokeWidth={1}
                     dot={{ r: 4, fill: '#D1D5DB', strokeWidth: 0 }}
                     strokeDasharray="4 4"
                     name={t('analytics.weight')}
@@ -291,7 +298,7 @@ const WeightSection: React.FC = () => {
                     type="monotone" 
                     dataKey="ma" 
                     stroke="#6366f1" 
-                    strokeWidth={4}
+                    strokeWidth={7} 
                     dot={false}
                     name={t('analytics.moving_avg')}
                   />
@@ -355,7 +362,7 @@ const WeightSection: React.FC = () => {
                         <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">{format(new Date(), 'MMMM yyyy')}</span>
                     </div>
                     <div className="grid grid-cols-7 gap-2">
-                       {['M','T','W','T','F','S','S'].map(d => <div key={d} className="text-[8px] font-black text-gray-300 text-center">{d}</div>)}
+                       {['M','T','W','T','F','S','S'].map((d, i) => <div key={`${d}-${i}`} className="text-[8px] font-black text-gray-300 text-center">{d}</div>)}
                        {Array.from({ length: 30 }).map((_, i) => {
                           const dayDate = startOfDay(subDays(new Date(), 29 - i));
                           const dayLogs = weightLogs?.filter(l => isSameDay(new Date(l.timestamp), dayDate)) || [];
@@ -381,7 +388,7 @@ const WeightSection: React.FC = () => {
                                )}>{dayDate.getDate()}</span>
                                {hasLog && (
                                   <div className="text-[7px] font-black opacity-60">
-                                     {dayLogs[dayLogs.length - 1].weight}
+                                     {dayLogs[dayLogs.length - 1].weight.toFixed(1)}
                                   </div>
                                )}
                             </button>
@@ -404,7 +411,7 @@ const WeightSection: React.FC = () => {
                               <div className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-1 flex items-center gap-2">
                                 <Calendar size={10} /> {format(new Date(log.timestamp), 'EEEE, MMM d')}
                               </div>
-                              <div className="text-xl font-black text-gray-900">{log.weight} <span className="text-[10px] font-bold text-gray-400 uppercase">kg</span></div>
+                              <div className="text-xl font-black text-gray-900">{log.weight.toFixed(1)} <span className="text-[10px] font-bold text-gray-400 uppercase">kg</span></div>
                            </div>
                            <div className="text-primary-500 opacity-0 group-hover:opacity-100 transition-opacity p-3 bg-primary-50 rounded-2xl">
                               <Edit3 size={18} />
@@ -520,7 +527,7 @@ export const Analytics: React.FC = () => {
     for (let i = 6; i >= 0; i--) {
       const day = subDays(new Date(), i);
       const dayLogs = last7DaysLogs?.filter(l => isSameDay(new Date(l.timestamp), day)) || [];
-      const totalCals = dayLogs.reduce((acc, l) => acc + (l.calories * (l.amount / 100)), 0);
+      const totalCals = dayLogs.reduce((acc, l) => acc + (l.nutrients?.calories || 0), 0);
       data.push({
         name: format(day, 'EEE'),
         calories: Math.round(totalCals),
