@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { db } from '../db/db';
 import { useStore } from '../store/useStore';
+import { snapWeight } from './constants';
 
 export async function syncData() {
   const store = useStore.getState();
@@ -313,7 +314,7 @@ export async function syncData() {
 
       await db.weight.put({
         id: localId,
-        weight: Number(cloudW.weight_kg),
+        weight: snapWeight(Number(cloudW.weight_kg)),
         timestamp: new Date(cloudW.created_at).getTime()
       });
     }

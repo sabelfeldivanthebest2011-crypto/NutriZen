@@ -63,14 +63,19 @@ export default function App() {
   useEffect(() => {
     seedDatabase();
 
-    // Check active session and initialize
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setAuthLoading(false);
-      if (session?.user) {
-        syncData();
-      }
-    });
+    // Check active session and initialize with robust error handling
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setUser(session?.user ?? null);
+        setAuthLoading(false);
+        if (session?.user) {
+          syncData();
+        }
+      })
+      .catch((err) => {
+        console.error('[Auth] Initial session resolution failed:', err);
+        setAuthLoading(false);
+      });
 
     // Setup listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -94,6 +99,13 @@ export default function App() {
     }, 60000); // 60s background sync
     return () => clearInterval(interval);
   }, [user]);
+
+  // Fallback redirect if activeTab gets into 'library' state
+  useEffect(() => {
+    if ((activeTab as string) === 'library') {
+      setActiveTab('home');
+    }
+  }, [activeTab, setActiveTab]);
 
   // Notification Logic
   useEffect(() => {
@@ -212,24 +224,6 @@ export default function App() {
                 transition={{ duration: 0.2 }}
               >
                 <Profile onNavigate={setSubView} setActiveTab={setActiveTab} />
-              </motion.div>
-            )}
-            {activeTab === 'library' && (
-              <motion.div
-                key="library"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
-                 <div className="fixed inset-0 z-[50] bg-white">
-                    <FoodSearchModal 
-                       onClose={() => setActiveTab('diary')} 
-                       mealType="library" 
-                       initialTab="my-food"
-                       initialSubTab="favorites"
-                    />
-                 </div>
               </motion.div>
             )}
           </AnimatePresence>

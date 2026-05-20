@@ -1,8 +1,56 @@
+# Environment / Secrets Configuration
+# Exclude all custom environment configurations
+.env
+.env.*
+# Do not ignore .env.example
+!.env.example
+
+# React / Node.js build & dev dependencies
 node_modules/
 build/
 dist/
 coverage/
 .DS_Store
 *.log
-.env*
-!.env.example
+
+# Flutter-specific ignore rules
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Android-specific ignore rules
+.gradle/
+local.properties
+*.keystore
+*.jks
+*-key.pem
+/android/app/key.properties
+/android/.gradle/
+
+# iOS-specific ignore rules
+/ios/Pods/
+/ios/.symlinks/
+/ios/Flutter/Flutter.podspec
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/flutter_export_environment.sh
+/ios/Runner/GeneratedPluginRegistrant.h
+/ios/Runner/GeneratedPluginRegistrant.m
+*.xcworkspace
+xcuserdata/
+DerivedData/
+
+# Web-specific ignore rules
+/web/flutter_bootstrap.js
+
+# IDEs & System files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

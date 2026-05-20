@@ -79,7 +79,7 @@ interface WeightSliderProps {
   onChange: (value: number) => void;
   label?: string;
   unit?: string;
-  step?: number;
+  step: number;
   isDark?: boolean;
 }
 
@@ -93,29 +93,53 @@ export const WeightSlider: React.FC<WeightSliderProps> = ({
   step,
   isDark = true,
 }) => {
+  if (step === undefined || step === null || typeof step !== 'number') {
+    throw new Error("WeightSlider: step is a strictly required numeric prop.");
+  }
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isReady, setIsReady] = useState(false);
+  const localUpdateRef = useRef(false);
 
   // Constants
   const stepWidth = 12; // Width between ticks
   const range = max - min;
   
-  // Decide the step: if explicit step is passed, use it, else default to 0.05 for high precision (or 1 for calibrating large ranges)
-  const actualStep = step !== undefined ? step : (range > 500 ? 1 : 0.05); 
+  const actualStep = step; 
   const totalSteps = Math.round(range / actualStep);
 
   const snapToStep = (val: number, stepVal: number): number => {
-    const multiplier = 1 / stepVal;
-    return Math.round(val * multiplier) / multiplier;
+    if (typeof val !== 'number' || isNaN(val)) return min;
+    const multiplier = Math.round(1 / stepVal);
+    const snapped = Math.round(val * multiplier) / multiplier;
+    const bounded = Math.max(min, Math.min(max, snapped));
+    const stepStr = stepVal.toString();
+    const decimalPlaces = stepStr.includes('.') ? stepStr.split('.')[1].length : 0;
+    return parseFloat(bounded.toFixed(decimalPlaces));
   };
 
+  // Guard against scroll loop: only apply scroll update if difference matches significant layout deviation
   useEffect(() => {
     if (scrollRef.current) {
-      const scrollLeft = ((value - min) / actualStep) * stepWidth;
-      scrollRef.current.scrollLeft = scrollLeft;
-      setIsReady(true);
+      const targetScrollLeft = ((value - min) / actualStep) * stepWidth;
+      const currentScrollLeft = scrollRef.current.scrollLeft;
+
+      if (localUpdateRef.current) {
+        localUpdateRef.current = false;
+        if (!isReady) {
+          setIsReady(true);
+        }
+        return;
+      }
+
+      if (Math.abs(currentScrollLeft - targetScrollLeft) > (stepWidth / 2)) {
+        scrollRef.current.scrollLeft = targetScrollLeft;
+      }
+      if (!isReady) {
+        setIsReady(true);
+      }
     }
-  }, [min, actualStep, stepWidth]); 
+  }, [value, min, actualStep, stepWidth, isReady]); 
 
   const handleScroll = () => {
     if (!scrollRef.current || !isReady) return;
@@ -128,12 +152,14 @@ export const WeightSlider: React.FC<WeightSliderProps> = ({
     
     // Ensure we are within bounds and only trigger change if value actually changed
     const finalValue = Math.max(min, Math.min(max, rounded));
-    if (Math.abs(finalValue - value) >= (actualStep / 2)) {
+    if (Math.abs(finalValue - value) > 0.0001) {
+      localUpdateRef.current = true;
       onChange(finalValue);
     }
   };
 
-  const decimalPlaces = actualStep === 0.05 ? 2 : (actualStep === 1 ? 0 : 1);
+  const stepStr = actualStep.toString();
+  const decimalPlaces = stepStr.includes('.') ? stepStr.split('.')[1].length : 0;
 
   return (
     <div className="space-y-4">
@@ -160,7 +186,7 @@ export const WeightSlider: React.FC<WeightSliderProps> = ({
           ref={scrollRef}
           onScroll={handleScroll}
           className="h-full overflow-x-scroll no-scrollbar snap-x snap-mandatory flex items-end pb-4"
-          style={{ paddingLeft: '50%', paddingRight: '50%' }}
+          style={{ paddingLeft: 'calc(50% - 6px)', paddingRight: 'calc(50% - 6px)' }}
         >
           <div className="flex items-end gap-0" style={{ width: totalSteps * stepWidth }}>
               {Array.from({ length: totalSteps + 1 }).map((_, i) => {
@@ -176,7 +202,7 @@ export const WeightSlider: React.FC<WeightSliderProps> = ({
                   >
                      {isMajor && (
                        <span className={cn("text-[9px] font-black mb-2", isDark ? "text-zinc-600 animate-fadeIn" : "text-zinc-700 animate-fadeIn")}>
-                         {val.toFixed(actualStep === 0.05 ? 1 : 0)}
+                         {val.toFixed(actualStep === 0.05 ? 1 : (actualStep === 1 ? 0 : 1))}
                        </span>
                      )}
                      <div className={cn(

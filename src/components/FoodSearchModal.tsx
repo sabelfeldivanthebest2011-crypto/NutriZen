@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Search, Plus, ChevronLeft, Check, History, Trash2, RotateCcw } from 'lucide-react';
 import { db, FoodItem, FoodLog } from '../db/db';
@@ -87,6 +87,16 @@ export const FoodSearchModal: React.FC<{
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [displayLimit, setDisplayLimit] = useState(25);
 
+  const [isSearching, setIsSearching] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'search' | 'my-food'>(initialTab);
+  const [myFoodSubTab, setMyFoodSubTab] = useState<'recipes' | 'products' | 'favorites'>(initialSubTab);
+  const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState<'recipe' | 'product' | null>(null);
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [customAmount, setCustomAmount] = useState(editingLog ? Math.round(editingLog.amount) : 100);
+
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedQuery(query);
@@ -97,16 +107,6 @@ export const FoodSearchModal: React.FC<{
   useEffect(() => {
     setDisplayLimit(25);
   }, [debouncedQuery, activeCategory, activeTab, myFoodSubTab]);
-
-  const [isSearching, setIsSearching] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'search' | 'my-food'>(initialTab);
-  const [myFoodSubTab, setMyFoodSubTab] = useState<'recipes' | 'products' | 'favorites'>(initialSubTab);
-  const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [editorMode, setEditorMode] = useState<'recipe' | 'product' | null>(null);
-  const [editingItem, setEditingItem] = useState<any>(null);
-  const [customAmount, setCustomAmount] = useState(editingLog ? Math.round(editingLog.amount) : 100);
   const { t, lang } = useTranslation();
   const { searchHistory, recentFoods, addSearchQuery, clearSearchHistory, removeSearchQuery, addRecentFood, toggleFavorite, isFavorite, removeRecentFood } = useStore();
   const [toast, setToast] = useState<{ message: string, onUndo?: () => void, isVisible: boolean }>({ message: '', isVisible: false });

@@ -125,12 +125,41 @@ export const db = new NutriZenDB();
 // Initial Mock Data (Imported from separate file)
 import { foodItems as initialFoods } from './foodItems';
 
+import { snapWeight } from '../lib/constants';
+
+export async function migrateWeightLogs() {
+  console.log('[migrateWeightLogs] Checking if weight logs require precision normalization...');
+  try {
+    const logs = await db.weight.toArray();
+    let migratedCount = 0;
+    for (const log of logs) {
+      if (log.id) {
+        const rounded = snapWeight(log.weight);
+        if (log.weight !== rounded) {
+          await db.weight.update(log.id, { weight: rounded });
+          migratedCount++;
+        }
+      }
+    }
+    if (migratedCount > 0) {
+      console.log(`[migrateWeightLogs] Successfully migrated and normalized ${migratedCount} weight logs to current precision step.`);
+    } else {
+      console.log('[migrateWeightLogs] No weight logs needed normalization.');
+    }
+  } catch (err) {
+    console.error('[migrateWeightLogs] Error during weight logs migration:', err);
+  }
+}
+
 export async function seedDatabase() {
   console.log('[seedDatabase] Initializing seeding check...');
   try {
     // Open DB explicitly to catch any version change or upgrade errors
     await db.open();
     console.log('[seedDatabase] Database opened successfully. Version:', db.verno);
+    
+    // Normalize existing historical weight values
+    await migrateWeightLogs();
     
     const count = await db.foods.count();
     console.log('[seedDatabase] Current items count in db.foods:', count);

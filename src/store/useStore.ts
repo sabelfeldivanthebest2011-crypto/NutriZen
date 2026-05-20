@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Language } from '../lib/i18n';
 import { db } from '../db/db';
+import { WEIGHT_STEP, snapWeight } from '../lib/constants';
 
 interface UserProfile {
   name: string;
@@ -41,12 +42,13 @@ interface UserProfile {
     sugar: number;
   };
   useManualMacros: boolean;
+  manualCalories?: number;
 }
 
 interface AppState {
   isOnboarded: boolean;
   profile: UserProfile;
-  activeTab: 'home' | 'diary' | 'analytics' | 'profile' | 'library';
+  activeTab: 'home' | 'diary' | 'analytics' | 'profile';
   activeDashboardTab: 'nutrition' | 'education';
   lastTDEECorrection: number;
   adaptiveTDEE: number;
@@ -68,7 +70,7 @@ interface AppState {
   removeSearchQuery: (query: string) => void;
   addRecentFood: (food: any) => void;
   removeRecentFood: (foodName: string) => void;
-  setActiveTab: (tab: 'home' | 'diary' | 'analytics' | 'profile' | 'library') => void;
+  setActiveTab: (tab: 'home' | 'diary' | 'analytics' | 'profile') => void;
   setActiveDashboardTab: (tab: 'nutrition' | 'education') => void;
   updateAdaptiveTDEE: (newTDEE: number) => void;
   setIsOnboarded: (status: boolean) => void;
@@ -159,10 +161,10 @@ export const useStore = create<AppState>()(
       confirmOnboarding: async () => {
         const { profile } = get();
         await db.weight.add({
-          weight: profile.weight,
+          weight: snapWeight(profile.weight),
           timestamp: Date.now()
         });
-        set({ isOnboarded: true });
+        set({ isOnboarded: true, activeTab: 'home' });
       },
       addSearchQuery: (query) => {
         if (!query.trim()) return;
@@ -244,22 +246,105 @@ export const useStore = create<AppState>()(
           set({ adaptiveTDEE: Math.round(tdee) });
         } else if (key === 'calories') {
           calories = val;
-          const totalCals = (protein * 4 + carbs * 4 + fat * 9) || 2000;
-          const pRatio = (protein * 4) / totalCals;
-          const fRatio = (fat * 9) / totalCals;
-          const cRatio = (carbs * 4) / totalCals;
-          
-          protein = (calories * pRatio) / 4;
-          fat = (calories * fRatio) / 9;
-          carbs = (calories * cRatio) / 4;
+          // Recalculate macros based on mode and percentage, or maintain ratios
+          if (profile.useManualMacros && profile.manualMacroTargets) {
+            const m = profile.manualMacroTargets;
+            if (m.mode === 'percent') {
+              protein = (calories * (m.protein / 100)) / 4;
+              carbs = (calories * (m.carbs / 100)) / 4;
+              fat = (calories * (m.fat / 100)) / 9;
+            } else {
+              // grams mode, maintain grams as is and update manualCalories only
+            }
+          } else {
+            // No manual macros, maintain relative ratios of existing macros
+            const totalCals = (protein * 4 + carbs * 4 + fat * 9) || 2000;
+            const pRatio = (protein * 4) / totalCals;
+            const fRatio = (fat * 9) / totalCals;
+            
+            protein = (calories * pRatio) / 4;
+            fat = (calories * fRatio) / 9;
+            carbs = (calories - (protein * 4) - (fat * 9)) / 4;
+            if (carbs < 0) carbs = 0;
+          }
+
+          // Protect Teen Fats
+          const isTeen = (profile.age) < 20;
+          if (isTeen) {
+            const floorFatFromCals = (calories * 0.25) / 9;
+            const floorFatFromWeight = profile.weight * 0.8;
+            const teenMinFat = Math.max(floorFatFromCals, floorFatFromWeight);
+            if (fat < teenMinFat) {
+              fat = teenMinFat;
+              carbs = (calories - (protein * 4) - (fat * 9)) / 4;
+              if (carbs < 0) carbs = 0;
+            }
+          }
+
+          set((state) => ({
+            profile: {
+              ...state.profile,
+              manualCalories: calories
+            }
+          }));
         } else {
-          if (key === 'protein') protein = val;
-          else if (key === 'carbs') carbs = val;
-          else if (key === 'fat') fat = val;
-          else if (key === 'fiber') fiber = val;
+          // macro update: protein, carbs, fat, fiber, sugar
+          if (key === 'fiber') fiber = val;
           else if (key === 'sugar') sugar = val;
-          
-          calories = protein * 4 + carbs * 4 + fat * 9;
+          else {
+            // Manual macro updates (protein, carbs, fat)
+            if (profile.manualMacroTargets?.mode === 'percent') {
+              // Percent Mode: update percentage, keep calories fixed, recalculate gram values
+              const m = { ...profile.manualMacroTargets, [key]: val };
+              protein = (calories * (m.protein / 100)) / 4;
+              carbs = (calories * (m.carbs / 100)) / 4;
+              fat = (calories * (m.fat / 100)) / 9;
+
+              const isTeen = (profile.age) < 20;
+              if (isTeen) {
+                const floorFatFromCals = (calories * 0.25) / 9;
+                const floorFatFromWeight = profile.weight * 0.8;
+                const teenMinFat = Math.max(floorFatFromCals, floorFatFromWeight);
+                if (fat < teenMinFat) {
+                  fat = teenMinFat;
+                  carbs = (calories - (protein * 4) - (fat * 9)) / 4;
+                  if (carbs < 0) carbs = 0;
+                }
+              }
+
+              set((state) => ({
+                profile: {
+                  ...state.profile,
+                  manualMacroTargets: m
+                }
+              }));
+            } else {
+              // Grams: update absolute gram values, keep calories completely fixed as single mutable source of truth
+              if (key === 'protein') protein = val;
+              else if (key === 'carbs') carbs = val;
+              else if (key === 'fat') fat = val;
+
+              const isTeen = (profile.age) < 20;
+              if (isTeen) {
+                const floorFatFromCals = (calories * 0.25) / 9;
+                const floorFatFromWeight = profile.weight * 0.8;
+                const teenMinFat = Math.max(floorFatFromCals, floorFatFromWeight);
+                if (fat < teenMinFat) {
+                  fat = teenMinFat;
+                }
+              }
+
+              if (profile.manualMacroTargets?.mode === 'grams') {
+                const m = { ...profile.manualMacroTargets, [key]: val };
+                set((state) => ({
+                  profile: {
+                    ...state.profile,
+                    manualMacroTargets: m
+                  }
+                }));
+              }
+            }
+          }
         }
 
         set({
@@ -291,6 +376,12 @@ export const useStore = create<AppState>()(
       },
       setProfile: async (newProfile) => {
         const currentProfile = get().profile;
+        if (newProfile.weight !== undefined) {
+          newProfile.weight = snapWeight(newProfile.weight);
+        }
+        if (newProfile.targetWeight !== undefined) {
+          newProfile.targetWeight = snapWeight(newProfile.targetWeight);
+        }
         const updatedProfile = { ...currentProfile, ...newProfile };
         
         // Auto-calculate Age if birthDate changed
@@ -344,14 +435,19 @@ export const useStore = create<AppState>()(
 
         // 6. Target Calories based on Goal
         let targetCalories = tdee;
-        if (goal === 'lose') targetCalories *= 0.8; // Stable 20% deficit
-        else if (goal === 'gain') targetCalories *= 1.1; // 10% surplus
-
-        // Security bounds
-        const minCals = gender === 'female' ? 1200 : 1500;
-        targetCalories = Math.max(targetCalories, minCals);
+        if (updatedProfile.manualCalories !== undefined) {
+          targetCalories = updatedProfile.manualCalories;
+        } else {
+          if (goal === 'lose') targetCalories *= 0.8; // Stable 20% deficit
+          else if (goal === 'gain') targetCalories *= 1.1; // 10% surplus
+          // Security bounds
+          const minCals = gender === 'female' ? 1200 : 1500;
+          targetCalories = Math.max(targetCalories, minCals);
+        }
 
         let protein, carbs, fat, fiber, sugar;
+
+        const isTeen = (updatedProfile.age || age) < 20;
 
         if (updatedProfile.useManualMacros && updatedProfile.manualMacroTargets) {
           const m = updatedProfile.manualMacroTargets;
@@ -359,10 +455,33 @@ export const useStore = create<AppState>()(
             protein = m.protein;
             carbs = m.carbs;
             fat = m.fat;
+
+            if (isTeen) {
+              const floorFatFromCals = (targetCalories * 0.25) / 9;
+              const floorFatFromWeight = weight * 0.8;
+              const teenMinFat = Math.max(floorFatFromCals, floorFatFromWeight);
+              if (fat < teenMinFat) {
+                fat = teenMinFat;
+              }
+            }
+            // Calorie sum matching explicit grams
+            targetCalories = protein * 4 + carbs * 4 + fat * 9;
+            updatedProfile.manualCalories = targetCalories;
           } else {
             protein = (targetCalories * (m.protein / 100)) / 4;
             carbs = (targetCalories * (m.carbs / 100)) / 4;
             fat = (targetCalories * (m.fat / 100)) / 9;
+
+            if (isTeen) {
+              const floorFatFromCals = (targetCalories * 0.25) / 9;
+              const floorFatFromWeight = weight * 0.8;
+              const teenMinFat = Math.max(floorFatFromCals, floorFatFromWeight);
+              if (fat < teenMinFat) {
+                fat = teenMinFat;
+                carbs = (targetCalories - (protein * 4) - (fat * 9)) / 4;
+                if (carbs < 0) carbs = 0;
+              }
+            }
           }
           fiber = m.fiber;
           sugar = m.sugar;
@@ -371,7 +490,19 @@ export const useStore = create<AppState>()(
           const ratio = updatedProfile.proteinPerKg || 2.0;
           protein = weight * ratio; // Custom g/kg or fallback to 2.0g/kg
           fat = weight * 0.8;    // Default 0.8g/kg
+
+          if (isTeen) {
+            const floorFatFromCals = (targetCalories * 0.25) / 9;
+            const floorFatFromWeight = weight * 0.8;
+            const teenMinFat = Math.max(floorFatFromCals, floorFatFromWeight);
+            if (fat < teenMinFat) {
+              fat = teenMinFat;
+            }
+          }
+
           carbs = (targetCalories - (protein * 4) - (fat * 9)) / 4;
+          if (carbs < 0) carbs = 0;
+
           fiber = Math.min(Math.max(updatedProfile.weight * 0.4, 25), 50);
           sugar = 50;
         }

@@ -5,11 +5,13 @@ import { useStore } from '../store/useStore';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { subDays, format, isSameDay, startOfDay } from 'date-fns';
-import { TrendingDown, Calendar, Database, Award, Info, AlertTriangle, Check, Zap, X, Trash2, ChevronRight, Droplets, Edit3, Plus } from 'lucide-react';
+import { TrendingDown, Calendar, Database, Award, Info, AlertTriangle, Check, Zap, X, Trash2, ChevronRight, Droplets, Edit3, Plus, Scale } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../lib/useTranslation';
 import { WeightSlider } from './ui/Selectors';
 import { syncData } from '../lib/sync';
+import { WEIGHT_STEP, snapWeight } from '../lib/constants';
+import { calculateAdaptiveTDEE, DailyLogSummary } from '../lib/tdee-engine';
 
 const AnalyticsCard: React.FC<{ icon: React.ReactNode, label: string, value: string, desc: string }> = ({ icon, label, value, desc }) => (
   <div className="bg-white p-5 rounded-[2rem] border border-gray-50 shadow-sm transition-all hover:shadow-md">
@@ -30,10 +32,13 @@ const WeightSection: React.FC = () => {
   const [editingLog, setEditingLog] = useState<{ weight: number, timestamp: number, id?: number } | null>(null);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showAdaptiveModal, setShowAdaptiveModal] = useState(false);
-  const [suggestedTDEE, setSuggestedTDEE] = useState(0);
 
   const weightLogs = useLiveQuery(
     () => db.weight.orderBy('timestamp').toArray()
+  );
+
+  const foodLogs = useLiveQuery(
+    () => db.logs.toArray()
   );
 
   const dayLogs = useMemo(() => {
@@ -69,30 +74,83 @@ const WeightSection: React.FC = () => {
     });
   }, [weightLogs]);
 
+  // Robust Adaptive TDEE Calculation Result
+  const adaptiveResult = useMemo(() => {
+    if (!weightLogs || !foodLogs) return null;
+
+    // Create a map of date -> calories
+    const dailyCalories: { [dateKey: string]: number } = {};
+    foodLogs.forEach(log => {
+      const dateKey = format(new Date(log.timestamp), 'yyyy-MM-dd');
+      dailyCalories[dateKey] = (dailyCalories[dateKey] || 0) + (log.nutrients?.calories || 0);
+    });
+
+    // Create a map of date -> weights (average per day)
+    const dailyWeights: { [dateKey: string]: { sum: number, count: number, timestamp: number } } = {};
+    weightLogs.forEach(log => {
+      const dateKey = format(new Date(log.timestamp), 'yyyy-MM-dd');
+      if (!dailyWeights[dateKey]) {
+        dailyWeights[dateKey] = { sum: 0, count: 0, timestamp: startOfDay(new Date(log.timestamp)).getTime() };
+      }
+      dailyWeights[dateKey].sum += log.weight;
+      dailyWeights[dateKey].count += 1;
+    });
+
+    // We build a timeline of the last 60 days
+    const uniqueDates = new Set<string>();
+    const oneDay = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    for (let i = 59; i >= 0; i--) {
+      const ts = now - i * oneDay;
+      const dateKey = format(new Date(ts), 'yyyy-MM-dd');
+      uniqueDates.add(dateKey);
+    }
+
+    Object.keys(dailyCalories).forEach(d => uniqueDates.add(d));
+    Object.keys(dailyWeights).forEach(d => uniqueDates.add(d));
+
+    const dailySummaries: DailyLogSummary[] = Array.from(uniqueDates).map(dateKey => {
+      const parts = dateKey.split('-');
+      const year = parseInt(parts[0]);
+      const month = parseInt(parts[1]) - 1;
+      const day = parseInt(parts[2]);
+      const timestamp = new Date(year, month, day).getTime();
+
+      const weightEntry = dailyWeights[dateKey];
+      const calEntry = dailyCalories[dateKey];
+
+      return {
+        dateStr: dateKey,
+        timestamp,
+        rawWeight: weightEntry ? weightEntry.sum / weightEntry.count : undefined,
+        caloriesConsumed: calEntry !== undefined ? calEntry : undefined
+      };
+    }).sort((a, b) => a.timestamp - b.timestamp);
+
+    const currentTargets = useStore.getState().calculatedTargets;
+    return calculateAdaptiveTDEE(
+      dailySummaries,
+      currentTargets.tdee || 2000,
+      adaptiveTDEE
+    );
+  }, [weightLogs, foodLogs, adaptiveTDEE]);
+
   const handleSave = async (weight: number, date: number, id?: number) => {
+    const snappedWeight = snapWeight(weight);
     if (id) {
-      await db.weight.update(id, { weight, timestamp: date });
+      await db.weight.update(id, { weight: snappedWeight, timestamp: date });
     } else {
-      await db.weight.add({ weight, timestamp: date });
+      await db.weight.add({ weight: snappedWeight, timestamp: date });
     }
 
     if (isSameDay(new Date(date), new Date())) {
-      setProfile({ weight });
+      setProfile({ weight: snappedWeight });
     }
     
     setEditingLog(null);
 
     // Trigger cloud synchronization
     syncData();
-
-    // Adaptive logic (only for current/recent logs)
-    if (weightData.length >= 4) {
-       const firstWeight = weightData[0].weight;
-       const days = weightData.length;
-       const weightChange = weight - firstWeight;
-       const adjustment = (weightChange * 7700) / days;
-       setSuggestedTDEE(adaptiveTDEE + adjustment);
-    }
   };
 
   const deleteWeight = async (id: number) => {
@@ -186,8 +244,9 @@ const WeightSection: React.FC = () => {
                        </div>
                        <WeightSlider 
                          value={editingLog.weight} 
-                         onChange={(w) => setEditingLog(prev => prev ? { ...prev, weight: w } : null)}
+                         onChange={(w) => setEditingLog(prev => prev ? { ...prev, weight: snapWeight(w) } : null)}
                          min={40} max={200}
+                         step={WEIGHT_STEP}
                        />
                        <button 
                          onClick={() => handleSave(editingLog.weight, editingLog.timestamp, editingLog.id)}
@@ -237,8 +296,9 @@ const WeightSection: React.FC = () => {
                   <div className="space-y-12">
                     <WeightSlider 
                       value={editingLog.weight} 
-                      onChange={(w) => setEditingLog(prev => prev ? { ...prev, weight: w } : null)}
+                      onChange={(w) => setEditingLog(prev => prev ? { ...prev, weight: snapWeight(w) } : null)}
                       min={40} max={200}
+                      step={WEIGHT_STEP}
                     />
 
                     <div className="grid grid-cols-2 gap-4">
@@ -325,8 +385,11 @@ const WeightSection: React.FC = () => {
             </div>
             <p className="text-sm text-gray-400 font-bold leading-relaxed tracking-tight mb-8">{t('analytics.empty_history')}</p>
             <button 
-              onClick={() => setIsLogging(true)}
-              className="bg-gray-900 text-white px-8 py-4 rounded-2xl font-black text-xs shadow-xl active:scale-95 transition-all"
+              onClick={() => {
+                setSelectedDay(startOfDay(new Date()).getTime());
+                setEditingLog({ weight: profile.weight || 70, timestamp: Date.now() });
+              }}
+              className="bg-gray-900 text-white px-8 py-4 rounded-2xl font-black text-xs shadow-xl active:scale-95 transition-all cursor-pointer"
             >
               + {t('analytics.log_weight')}
             </button>
@@ -441,11 +504,15 @@ const WeightSection: React.FC = () => {
                       <Zap size={24} fill="currentColor" />
                    </div>
                    <div>
-                      <h4 className="font-display font-black text-sm mb-1 tracking-tight">Metabolic Intelligence</h4>
-                      <p className="text-[11px] text-gray-400 leading-relaxed font-medium">
-                         {weightData[weightData.length - 1].weight > weightData[weightData.length - 2].weight 
-                           ? "Scale is up, but don't panic. Based on your intake, this is likely water retention from sodium or glycogen storage."
-                           : "The trend confirms fat loss. Your metabolic rate is responding well to the current calorie deficit."}
+                      <h4 className="font-display font-black text-sm mb-1 tracking-tight text-white">Metabolic Intelligence</h4>
+                      <p className="text-[11px] text-gray-400 leading-relaxed font-semibold">
+                         {adaptiveResult && adaptiveResult.confidenceScore > 0.4 ? (
+                           profile.language === 'ru' ? adaptiveResult.explanation_ru : adaptiveResult.explanation_en
+                         ) : (
+                           profile.language === 'ru' 
+                             ? "Система сглаживает скачки веса (воду) и вычисляет реальную скорость вашего обмена веществ."
+                             : "The adaptive engine filters out weight fluctuations and calculates your precise biological metabolic rate."
+                         )}
                       </p>
                       <button 
                         onClick={() => setShowAdaptiveModal(true)}
@@ -455,53 +522,145 @@ const WeightSection: React.FC = () => {
                       </button>
                    </div>
                 </div>
-             </div>
+              </div>
            )}
         </div>
 
-        {/* Adaptive TDEE Modal */}
         <AnimatePresence>
           {showAdaptiveModal && (
             <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="absolute inset-0 z-[60] bg-white/90 backdrop-blur-md flex items-center justify-center p-4 rounded-[2.5rem]"
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[120] bg-black/40 backdrop-blur-md flex items-center justify-center p-4 sm:p-6"
             >
-               <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl border border-primary-50 w-full animate-in zoom-in-95 duration-200">
-                  <div className="w-14 h-14 rounded-2xl bg-primary-100 flex items-center justify-center text-primary-600 mb-6 shadow-inner">
-                     <Zap size={28} fill="currentColor" />
-                  </div>
-                  <h3 className="text-xl font-display font-black mb-2 text-gray-900 tracking-tight">{t('analytics.intelligence')}</h3>
-                  <p className="text-xs text-gray-500 mb-8 leading-relaxed font-medium">
-                    {t('analytics.weight_change_desc')}
-                  </p>
+               <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] shadow-2xl border border-gray-100 w-full max-w-lg overflow-y-auto max-h-[90vh] animate-in zoom-in-95 duration-200 scrollbar-none font-sans">
                   
-                  <div className="flex justify-between items-center bg-gray-50 rounded-[2rem] p-5 mb-8 border border-gray-100">
-                     <div className="text-center">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t('analytics.current')}</div>
-                        <div className="text-lg font-black text-gray-700">{adaptiveTDEE} <span className="text-xs font-normal">kcal</span></div>
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="w-12 h-12 rounded-2xl bg-primary-50 flex items-center justify-center text-primary-600 shadow-sm shrink-0">
+                       <Zap size={24} fill="currentColor" />
+                    </div>
+                    <button 
+                      onClick={() => setShowAdaptiveModal(false)}
+                      className="p-2 text-gray-400 hover:text-gray-600 rounded-xl hover:bg-gray-50 transition-colors"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  <h3 className="text-xl font-display font-black mb-1 text-gray-900 tracking-tight">Adaptive TDEE Engine</h3>
+                  <p className="text-xs text-gray-400 mb-6 leading-relaxed font-semibold">
+                    {profile.language === 'ru' 
+                      ? "МакроФактор-модель метаболической адаптации. Анализирует реальное потребление энергии и биологический тренд веса."
+                      : "MacroFactor-style cellular metabolic rate. Evaluates daily energy intake matched against true weight trends."}
+                  </p>
+
+                  <div className="flex justify-between items-center bg-gray-50 rounded-[2rem] p-5 mb-6 border border-gray-100">
+                     <div className="text-center flex-1">
+                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1">{t('analytics.current')}</div>
+                        <div className="text-lg font-black text-gray-700">{adaptiveTDEE} <span className="text-[10px] font-semibold text-gray-450">kcal</span></div>
                      </div>
-                     <ChevronRight className="text-gray-200" size={24} />
-                     <div className="text-center">
-                        <div className="text-[10px] font-bold text-primary-500 uppercase tracking-widest flex items-center justify-center gap-1 mb-1">
+                     <ChevronRight className="text-gray-300" size={20} />
+                     <div className="text-center flex-1">
+                        <div className="text-[9px] font-bold text-primary-500 uppercase tracking-widest flex items-center justify-center gap-1 mb-1">
                            <TrendingDown size={10} /> {t('analytics.suggested')}
                         </div>
-                        <div className="text-2xl font-black text-primary-600">{Math.round(suggestedTDEE)} <span className="text-xs font-normal">kcal</span></div>
+                        <div className="text-2xl font-black text-primary-600">
+                          {adaptiveResult ? adaptiveResult.updatedTDEE : adaptiveTDEE} <span className="text-[12px] font-normal text-primary-400">kcal</span>
+                        </div>
                      </div>
                   </div>
+
+                  {/* 3-Level Weight Signals Layer */}
+                  <div className="mb-6 space-y-2.5">
+                    <h4 className="text-[10px] font-bold text-gray-450 uppercase tracking-widest">Biological Weight Trends</h4>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-gray-50 border border-gray-150 rounded-2xl p-3 text-center">
+                        <div className="text-[8px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Raw Log</div>
+                        <div className="text-xs font-black text-gray-750 font-mono">
+                          {adaptiveResult ? `${adaptiveResult.rawWeight.toFixed(1)} kg` : '--'}
+                        </div>
+                      </div>
+                      <div className="bg-primary-50/40 border border-primary-100/30 rounded-2xl p-3 text-center">
+                        <div className="text-[8px] font-bold text-primary-500 uppercase tracking-wider mb-0.5 font-sans">Smoothed (7d)</div>
+                        <div className="text-xs font-black text-primary-650 font-mono">
+                          {adaptiveResult ? `${adaptiveResult.smoothedWeight.toFixed(1)} kg` : '--'}
+                        </div>
+                      </div>
+                      <div className="bg-emerald-50/40 border border-emerald-100/30 rounded-2xl p-3 text-center">
+                        <div className="text-[8px] font-bold text-emerald-500 uppercase tracking-wider mb-0.5 font-sans">Trend (21d)</div>
+                        <div className="text-xs font-black text-emerald-650 font-mono">
+                          {adaptiveResult ? `${adaptiveResult.trendWeight.toFixed(1)} kg` : '--'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Noise Filtering Indicator */}
+                  {adaptiveResult?.noiseDetected && (
+                    <div className="mb-6 bg-amber-50 text-amber-800 border border-amber-100 rounded-2xl p-4 flex gap-3 text-xs leading-relaxed font-semibold">
+                      <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold mb-0.5">Water Retention / Noise Detected</p>
+                        <p className="text-[11px] opacity-90">
+                          {profile.language === 'ru' 
+                            ? "Резкий скачок веса без изменения калорий. Система заблокировала резкие скачки TDEE."
+                            : "Sudden weight fluctuation with stable intake detected. Core algorithm throttled updates to preserve stability."}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Confidence System Level */}
+                  <div className="mb-6">
+                    <div className="flex justify-between text-[10px] font-bold text-gray-450 uppercase tracking-widest mb-1.5">
+                      <span>Algorithm Confidence</span>
+                      <span className="text-primary-600 font-black">
+                        {adaptiveResult ? `${Math.round(adaptiveResult.confidenceScore * 100)}%` : '0%'}
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-150 h-2 rounded-full overflow-hidden">
+                      <div 
+                        className={cn(
+                          "h-full rounded-full transition-all duration-500", 
+                          adaptiveResult && adaptiveResult.confidenceScore > 0.6 
+                            ? "bg-emerald-500" 
+                            : adaptiveResult && adaptiveResult.confidenceScore > 0.3 
+                              ? "bg-amber-500" 
+                              : "bg-rose-500"
+                        )}
+                        style={{ width: `${adaptiveResult ? Math.min(100, Math.max(5, adaptiveResult.confidenceScore * 100)) : 10}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1.5 font-semibold">
+                      {adaptiveResult && adaptiveResult.confidenceScore < 0.3 
+                        ? (profile.language === 'ru' ? "Недостаточно данных. Рекомендуется ежедневная запись веса и еды." : "Unstable logs. Complete daily logging of raw weight/calories to maximize accuracy.")
+                        : (profile.language === 'ru' ? "Доверительный интервал в зеленой зоне. Математически стабильно." : "Robust tracking density achieved. High metabolic trend model accuracy.")}
+                    </p>
+                  </div>
+
+                  {/* Custom explanations */}
+                  {adaptiveResult && (
+                    <div className="mb-8 p-4 bg-gray-50 border border-gray-150 rounded-2xl text-[11px] font-semibold text-gray-500 leading-relaxed italic">
+                      * {profile.language === 'ru' ? adaptiveResult.explanation_ru : adaptiveResult.explanation_en}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                      <button 
                         onClick={() => {
-                          updateAdaptiveTDEE(suggestedTDEE);
+                          if (adaptiveResult) {
+                            updateAdaptiveTDEE(adaptiveResult.updatedTDEE);
+                          }
                           setShowAdaptiveModal(false);
                         }}
-                        className="bg-primary-600 text-white py-4 rounded-2xl text-xs font-black shadow-xl shadow-primary-200 flex items-center justify-center gap-2 active:scale-95 transition-all"
+                        className="bg-primary-600 text-white py-4 rounded-2xl text-xs font-black shadow-xl shadow-primary-200 flex items-center justify-center gap-2 active:scale-95 transition-all hover:bg-primary-700"
                      >
                         <Check size={16} /> {t('common.confirm')}
                      </button>
                      <button 
                         onClick={() => setShowAdaptiveModal(false)}
-                        className="bg-gray-100 text-gray-500 py-4 rounded-2xl text-xs font-black active:scale-95 transition-all"
+                        className="bg-gray-100 text-gray-500 py-4 rounded-2xl text-xs font-black active:scale-95 hover:bg-gray-200 transition-all"
                      >
                         {t('common.cancel')}
                      </button>

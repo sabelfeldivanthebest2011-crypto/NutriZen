@@ -1,0 +1,56 @@
+name: Flutter Build & Check
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the code from default branch
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Java Environment
+      - name: Set up Java Development Kit (JDK)
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # Step 3: Set up Flutter SDK
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      # Step 4: Cache Flutter package dependency indices to optimize pipeline time
+      - name: Cache pub dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.pub-cache
+            ${{ env.PUB_CACHE }}
+          key: ${{ runner.os }}-pub-${{ hashFiles('**/pubspec.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      # Step 5: Fetch external libraries and dependencies
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Step 6: Verify styling rules and check static logic errors
+      - name: Analyze code syntax
+        run: flutter analyze --no-fatal-warnings
+
+      # Step 7: Run codebase tests
+      - name: Run unit testing
+        run: flutter test --no-pub
+
+      # Step 8: Assemble Release build for Android
+      - name: Compile APK Release binary
+        run: flutter build apk --release
