@@ -187,6 +187,10 @@ export default function App() {
       case 'goals': return <GoalsEditor onBack={() => setSubView(null)} />;
       case 'meal-structure': return <MealStructureSettings onBack={() => setSubView(null)} />;
       case 'weight-guide': return <WeightMiniBook onBack={() => setSubView(null)} />;
+      
+      // ИСПРАВЛЕНО: Добавлен подэкран для просмотра политики из профиля
+      case 'privacy': return <WelcomeScreen onComplete={() => setSubView(null)} />;
+      
       case null: return null;
       default: 
         return (

@@ -56,17 +56,17 @@ export const Profile: React.FC<{
       try {
         const dump = JSON.parse(event.target?.result as string);
         if (dump.data) {
-           if (dump.data.userProducts?.length) await db.foods.bulkPut(dump.data.userProducts);
-           if (dump.data.recipes?.length) await db.recipes.bulkPut(dump.data.recipes);
-           if (dump.data.logs?.length) await db.logs.bulkPut(dump.data.logs);
-           if (dump.data.weight?.length) await db.weight.bulkPut(dump.data.weight);
-           
-           if (dump.data.profile) {
-             setProfile(dump.data.profile);
-           }
-           
-           alert(lang === 'ru' ? 'Импорт завершен!' : 'Import successful!');
-           window.location.reload();
+          if (dump.data.userProducts?.length) await db.foods.bulkPut(dump.data.userProducts);
+          if (dump.data.recipes?.length) await db.recipes.bulkPut(dump.data.recipes);
+          if (dump.data.logs?.length) await db.logs.bulkPut(dump.data.logs);
+          if (dump.data.weight?.length) await db.weight.bulkPut(dump.data.weight);
+          
+          if (dump.data.profile) {
+            setProfile(dump.data.profile);
+          }
+          
+          alert(lang === 'ru' ? 'Импорт завершен!' : 'Import successful!');
+          window.location.reload();
         }
       } catch (err) {
         alert(lang === 'ru' ? 'Ошибка импорта' : 'Import failed');
@@ -75,14 +75,24 @@ export const Profile: React.FC<{
     reader.readAsText(file);
   };
 
+  // ПОЛНОЕ УДАЛЕНИЕ ВСЕХ ДАННЫХ ИЗ СИСТЕМЫ
   const handleDeleteAll = async () => {
     try {
-      await supabase.auth.signOut();
+      // 1. Выходим из Supabase, чтобы сбросить облачную сессию
+      await supabase.auth.signOut().catch(() => {});
+      
+      // 2. Закрываем и полностью уничтожаем локальную базу данных Dexie
       db.close();
       await Dexie.delete('NutriZenDB');
+      
+      // 3. Стираем все флаги, включая статус онбординга и приветственного экрана
       localStorage.clear();
       sessionStorage.clear();
+      
+      // 4. Сбрасываем глобальный стейт приложения в сторе
       resetAll();
+      
+      // 5. Перенаправляем на корень с очищенным кэшем, чтобы запустить приложение с чистого листа
       window.location.href = window.location.origin + '?reset=' + Date.now();
     } catch (err) {
       console.error('Delete failed:', err);
@@ -279,7 +289,25 @@ export const Profile: React.FC<{
         </AnimatePresence>
       </section>
 
+      {/* Кнопки основных настроек, выхода и удаления */}
       <section className="px-4 pt-8 space-y-4">
+        
+        {/* НОВАЯ КНОПКА: Политика конфиденциальности */}
+        <button 
+          onClick={() => onNavigate?.('privacy')}
+          className="w-full bg-white border border-gray-50 rounded-[2rem] p-4 shadow-sm flex items-center justify-between group hover:bg-gray-50 transition-all active:scale-[0.98]"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 transition-transform group-hover:scale-105">
+              <Shield size={24} />
+            </div>
+            <span className="font-black text-sm text-gray-900">
+              {lang === 'ru' ? 'Политика конфиденциальности' : 'Privacy Policy'}
+            </span>
+          </div>
+          <ChevronRight size={18} className="text-gray-300" />
+        </button>
+
         <div className="bg-white rounded-[2rem] p-4 border border-gray-50 shadow-sm flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center text-gray-400">
@@ -373,5 +401,3 @@ const DataRow: React.FC<{ label: string, value: any }> = ({ label, value }) => (
     <span className="text-sm font-black text-gray-900">{value}</span>
   </div>
 );
-
-
