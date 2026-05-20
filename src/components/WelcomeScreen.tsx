@@ -4,7 +4,6 @@ interface WelcomeScreenProps {
   onComplete: () => void;
 }
 
-// Убедись, что здесь написано именно "export const WelcomeScreen"
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
   const [showPrivacy, setShowPrivacy] = useState(false);
 
@@ -48,14 +47,35 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onComplete }) => {
 
         {/* Раскрывающийся текст Политики */}
         {showPrivacy && (
-          <div className="mt-4 text-left bg-slate-50 border border-slate-200 rounded-lg p-4 max-h-48 overflow-y-auto text-[11px] text-slate-500 leading-normal">
+          <div className="mt-4 text-left bg-slate-50 border border-slate-200 rounded-lg p-4 max-h-60 overflow-y-auto text-[11px] text-slate-500 leading-relaxed">
             <p className="font-bold mb-1 text-slate-700 text-xs text-center">ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ</p>
-            <p className="text-center mb-2">Дата вступления в силу: 20 мая 2026 г.</p>
-            <p className="mb-2"><strong>Разработчик:</strong> Сабельфельд И. (контакты: sabelfeld.i@icloud.com).</p>
-            <p className="mb-2"><strong>Какие данные собираются:</strong> Прямые данные, вводимые пользователем (email при авторизации через Supabase, текущий вес, рост, возраст, пол, записи съеденных продуктов и КБЖУ). Автоматические данные (cookie-файлы сессии для удержания входа).</p>
-            <p className="mb-2"><strong>Цели:</strong> Расчет индивидуальной нормы калорий, отображение графиков прогресса на экране Trend, поиск продуктов через USDA API.</p>
-            <p className="mb-2"><strong>Передача третьим лицам:</strong> Данные не продаются и не передаются в коммерческих целях. Передача идет исключительно техническим провайдерам инфраструктуры для обеспечения работы приложения (Supabase, Vercel, GitHub Pages).</p>
-            <p className="mb-2"><strong>Права пользователя:</strong> Вы имеете полное право изменить свои данные или безвозвратно удалить свой аккаунт со всеми записями из базы данных. По вопросам поддержки писать на sabelfeld.i@icloud.com.</p>
+            <p className="text-center mb-3 text-[10px]">Дата последнего обновления: 20 мая 2026 г.</p>
+            <p className="mb-3"><strong>Разработчик:</strong> Сабельфельд И. (контактный email: sabelfeld.i@icloud.com).</p>
+            
+            <p className="font-semibold text-slate-700 mb-1">1. Какие данные мы собираем и обрабатываем:</p>
+            <ul className="list-disc pl-4 mb-3 space-y-1">
+              <li><strong>Данные, предоставляемые пользователем:</strong> Email-адрес (используется для аутентификации), а также физические параметры: текущий вес, рост, возраст, пол, и пользовательские записи о съеденных продуктах (включая КБЖУ).</li>
+              <li><strong>Автоматически собираемые данные:</strong> Технические cookie-файлы сессии, необходимые исключительно для поддержания авторизации пользователя в системе.</li>
+            </ul>
+
+            <p className="font-semibold text-slate-700 mb-1">2. Цели сбора и использования данных:</p>
+            <p className="mb-1">Все собираемые данные используются исключительно для обеспечения корректной работы сервиса, а именно:</p>
+            <ul className="list-disc pl-4 mb-3 space-y-1">
+              <li>Расчет индивидуальной суточной нормы калорий и макронутриентов.</li>
+              <li>Визуализация графиков прогресса пользователя на экране трендов (Trend).</li>
+              <li>Синхронизация данных пользователя между устройствами.</li>
+            </ul>
+
+            <p className="font-semibold text-slate-700 mb-1">3. Передача данных третьим лицам:</p>
+            <p className="mb-2">Мы не продаем, не обмениваем и не передаем ваши личные данные третьим лицам в коммерческих целях. Передача данных осуществляется исключительно в технических целях для обеспечения работоспособности инфраструктуры приложения следующим доверенным провайдерам:</p>
+            <ul className="list-disc pl-4 mb-3 space-y-1">
+              <li><strong>Supabase</strong> (хранение базы данных и аутентификация).</li>
+              <li><strong>Vercel / GitHub Pages</strong> (хостинг и доставка интерфейса приложения).</li>
+              <li>Для работы функции поиска продуктов используется <strong>USDA API</strong> (при этом ваши персональные данные в сервис USDA не передаются).</li>
+            </ul>
+
+            <p className="font-semibold text-slate-700 mb-1">4. Права пользователя и удаление данных:</p>
+            <p className="mb-2">Вы имеете полное право в любой момент изменить свои личные данные, а также запросить полное и безвозвратное удаление вашего аккаунта вместе со всей историей записей из базы данных. Вы можете сделать это через настройки профиля в приложении или обратившись в службу поддержки по адресу: <span className="underline">sabelfeld.i@icloud.com</span>.</p>
           </div>
         )}
 
