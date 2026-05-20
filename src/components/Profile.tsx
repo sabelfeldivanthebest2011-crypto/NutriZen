@@ -329,19 +329,19 @@ export const Profile: React.FC<{
            {t('profile.delete_data_warning') || 'NutriZen stores data locally. Deletion is IRREVERSIBLE.'}
         </p>
 
-        {/* --- ДОБАВЛЕННЫЙ ФУТЕР --- */}
+        {/* ЮРИДИЧЕСКИЙ ФУТЕР */}
         <div className="pt-6 border-t border-gray-100 text-center space-y-1.5 px-6">
           <p className="text-[9px] text-gray-400 font-black tracking-widest uppercase">
             Data Controller
           </p>
           <p className="text-[10px] text-gray-600 font-bold uppercase tracking-wider leading-relaxed">
-             IE Chebotarev M. A.
+            Сабельфельд И.
           </p>
           <p className="text-[9px] text-gray-400 font-medium pt-1">
-            Privacy Inquiries: <a href="mailto:max_cheb@mail.ru" className="text-primary-600 font-black hover:underline tracking-tight">max_cheb@mail.ru</a>
+            Privacy Inquiries: <a href="mailto:sabelfeld.i@icloud.com" className="text-primary-600 font-black hover:underline tracking-tight">sabelfeld.i@icloud.com</a>
           </p>
           <p className="text-[8px] text-gray-300 font-bold uppercase tracking-widest pt-2">
-             © {new Date().getFullYear()} NutriZen. All rights reserved.
+            © {new Date().getFullYear()} NutriZen. All rights reserved.
           </p>
         </div>
       </section>
@@ -353,8 +353,8 @@ export const Profile: React.FC<{
             className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xl flex items-center justify-center p-4"
           >
              <motion.div 
-              initial={{ scale: 0.9, y: 40 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 40 }}
-              className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl p-8 flex flex-col items-center text-center overflow-hidden relative"
+               initial={{ scale: 0.9, y: 40 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 40 }}
+               className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl p-8 flex flex-col items-center text-center overflow-hidden relative"
              >
                <div className="absolute top-0 left-0 w-full h-2 bg-rose-500" />
                <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-[2rem] flex items-center justify-center mb-6 shadow-inner">
@@ -367,18 +367,18 @@ export const Profile: React.FC<{
                </p>
 
                <div className="w-full space-y-3">
-                  <button 
-                    onClick={handleDeleteAll}
-                    className="w-full bg-rose-600 text-white py-5 rounded-[1.5rem] font-black text-sm shadow-xl shadow-rose-200 active:scale-95 transition-all"
-                  >
-                   {t('profile.confirm_delete_extra')}
-                  </button>
-                  <button 
-                    onClick={() => setShowDeleteModal(false)}
-                    className="w-full bg-gray-100 text-gray-500 py-5 rounded-[1.5rem] font-black text-sm active:scale-95 transition-all"
-                  >
-                    {t('common.cancel')}
-                  </button>
+                 <button 
+                   onClick={handleDeleteAll}
+                   className="w-full bg-rose-600 text-white py-5 rounded-[1.5rem] font-black text-sm shadow-xl shadow-rose-200 active:scale-95 transition-all"
+                 >
+                  {t('profile.confirm_delete_extra')}
+                 </button>
+                 <button 
+                   onClick={() => setShowDeleteModal(false)}
+                   className="w-full bg-gray-100 text-gray-500 py-5 rounded-[1.5rem] font-black text-sm active:scale-95 transition-all"
+                 >
+                   {t('common.cancel')}
+                 </button>
                </div>
              </motion.div>
           </motion.div>
