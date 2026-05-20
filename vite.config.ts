@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
     // ИСПРАВЛЕНО: Указываем путь к твоему репозиторию NutriZen
-    base: '/NutriZen/', 
+    base: process.env.VERCEL ? '/' : '/NutriZen/', 
     
     plugins: [react(), tailwindcss()],
     
