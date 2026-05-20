@@ -11,6 +11,7 @@ import { MealStructureSettings } from './components/MealStructureSettings';
 import { WeightMiniBook } from './components/WeightMiniBook';
 import { Navigation } from './components/Navigation';
 import { FoodSearchModal } from './components/FoodSearchModal';
+import { WelcomeScreen } from './components/WelcomeScreen'; // Импортируем новый экран
 import { seedDatabase } from './db/db';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from './lib/supabase';
@@ -59,6 +60,19 @@ export default function App() {
   const { isOnboarded, activeTab, setActiveTab, profile, user, setUser } = useStore();
   const [subView, setSubView] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  
+  // Состояние для отображения приветственного экрана (по умолчанию null, пока проверяем localStorage)
+  const [showWelcome, setShowWelcome] = useState<boolean | null>(null);
+
+  // Проверка localStorage при первой загрузке приложения
+  useEffect(() => {
+    const onboardingCompleted = localStorage.getItem('onboardingCompleted');
+    if (onboardingCompleted === 'true') {
+      setShowWelcome(false);
+    } else {
+      setShowWelcome(true);
+    }
+  }, []);
 
   useEffect(() => {
     seedDatabase();
@@ -132,6 +146,23 @@ export default function App() {
     return () => clearInterval(checkInterval);
   }, [profile.notificationsEnabled, profile.mealStructure]);
 
+  // Экшен завершения приветственного экрана
+  const handleWelcomeComplete = () => {
+    localStorage.setItem('onboardingCompleted', 'true');
+    setShowWelcome(false);
+  };
+
+  // 1. Пока проверяется состояние локального хранилища — возвращаем пустой экран (защита от моргания интерфейса)
+  if (showWelcome === null) {
+    return null;
+  }
+
+  // 2. Если пользователь зашел в первый раз — рендерим только WelcomeScreen
+  if (showWelcome) {
+    return <WelcomeScreen onComplete={handleWelcomeComplete} />;
+  }
+
+  // 3. Если приветственный экран пройден — включается стандартная логика авторизации и загрузки
   if (authLoading) {
     return (
       <div className="min-h-screen bg-[#070708] flex flex-col items-center justify-center p-8 text-center text-zinc-100">
