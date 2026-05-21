@@ -1,3 +1,4 @@
+import { WeightSlider } from './ui/WeightSlider'; // Проверьте путь, если Analytics.tsx в src/components/
 import React, { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
@@ -8,7 +9,6 @@ import { subDays, format, isSameDay, startOfDay } from 'date-fns';
 import { TrendingDown, Calendar, Database, Award, Info, AlertTriangle, Check, Zap, X, Trash2, ChevronRight, Droplets, Edit3, Plus, Scale } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../lib/useTranslation';
-import { WeightSlider } from './ui/Selectors';
 import { syncData } from '../lib/sync';
 import { WEIGHT_STEP, snapWeight } from '../lib/constants';
 import { calculateAdaptiveTDEE, DailyLogSummary } from '../lib/tdee-engine';
@@ -25,7 +25,7 @@ const AnalyticsCard: React.FC<{ icon: React.ReactNode, label: string, value: str
 );
 
 const WeightSection: React.FC = () => {
-  const { adaptiveTDEE, updateAdaptiveTDEE, setProfile, profile, enqueueDeleted } = useStore();
+  const { adaptiveTDEE, updateAdaptiveTDEE, setProfile, profile, enqueueDeleted } = useStore() as any;
   const { t } = useTranslation();
   const [isLogging, setIsLogging] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -127,7 +127,7 @@ const WeightSection: React.FC = () => {
       };
     }).sort((a, b) => a.timestamp - b.timestamp);
 
-    const currentTargets = useStore.getState().calculatedTargets;
+    const currentTargets = (useStore.getState() as any).calculatedTargets;
     return calculateAdaptiveTDEE(
       dailySummaries,
       currentTargets.tdee || 2000,
@@ -244,7 +244,7 @@ const WeightSection: React.FC = () => {
                        </div>
                        <WeightSlider 
                          value={editingLog.weight} 
-                         onChange={(w) => setEditingLog(prev => prev ? { ...prev, weight: snapWeight(w) } : null)}
+                         onChange={(w: number) => setEditingLog(prev => prev ? { ...prev, weight: snapWeight(w) } : null)}
                          min={40} max={200}
                          step={WEIGHT_STEP}
                        />
@@ -296,7 +296,7 @@ const WeightSection: React.FC = () => {
                   <div className="space-y-12">
                     <WeightSlider 
                       value={editingLog.weight} 
-                      onChange={(w) => setEditingLog(prev => prev ? { ...prev, weight: snapWeight(w) } : null)}
+                      onChange={(w: number) => setEditingLog(prev => prev ? { ...prev, weight: snapWeight(w) } : null)}
                       min={40} max={200}
                       step={WEIGHT_STEP}
                     />
@@ -343,7 +343,7 @@ const WeightSection: React.FC = () => {
                     contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
                     itemStyle={{ fontWeight: 800, fontSize: '12px' }}
                     labelStyle={{ fontWeight: 800, fontSize: '10px', textTransform: 'uppercase', color: '#9CA3AF' }}
-                    formatter={(val: number) => [val.toFixed(1), '']}
+                    formatter={(val: any) => [String(val), '']}
                   />
                   <Line 
                     type="monotone" 
@@ -674,7 +674,7 @@ const WeightSection: React.FC = () => {
 };
 
 export const Analytics: React.FC = () => {
-  const { calculatedTargets } = useStore();
+  const { calculatedTargets } = useStore() as any;
   const { t } = useTranslation();
   
   const last7DaysLogs = useLiveQuery(
@@ -714,7 +714,7 @@ export const Analytics: React.FC = () => {
         <AnalyticsCard
           icon={<TrendingDown className="text-primary-500" size={18} />}
           label="Metabolic Rate"
-          value={`${useStore.getState().adaptiveTDEE}`}
+          value={`${(useStore.getState() as any).adaptiveTDEE}`}
           desc="Estimated Maintenance (TDEE)"
         />
       </section>
