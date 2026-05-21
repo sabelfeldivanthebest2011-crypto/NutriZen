@@ -4,20 +4,17 @@ import { db, FoodLog, FoodItem } from '../db/db';
 import { FoodSearchModal } from './FoodSearchModal';
 import { useStore } from '../store/useStore';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Search, ChevronRight, X, User, Flame, Clock, Calendar, Trash2, Edit2, ChevronLeft, Droplets, Target, BookOpen, History, RotateCcw, Filter, Check } from 'lucide-react';
+import { Plus, ChevronRight, ChevronLeft, Flame, Trash2, Edit2, BookOpen, Target } from 'lucide-react';
 import { startOfDay, endOfDay, format, addDays, subDays, isSameDay } from 'date-fns';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../lib/useTranslation';
-import { searchInItems, fuseOptions } from '../search';
-import Fuse from 'fuse.js';
-import { RecipeEditor } from './RecipeEditor';
-import { ProductEditor } from './ProductEditor';
 import { Toast } from './ui/Toast';
 import { MealRatingModal } from './ui/MealRatingModal';
 import { calculateMealRating } from '../lib/nutritionLogic';
+import { supabase } from '../lib/supabase';
 
 export const Diary: React.FC = () => {
-  const { profile, setProfile, removeRecentFood, addRecentFood } = useStore();
+  const { profile, setProfile, user } = useStore();
   const { t } = useTranslation();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -48,17 +45,53 @@ export const Diary: React.FC = () => {
     const log = await db.logs.get(id);
     if (!log) return;
     
+    // Удаляем локально из Dexie
     await db.logs.delete(id);
+
+    // Удаляем из Supabase удаленно
+    if (user?.id) {
+      try {
+        await supabase.from('daily_meals').delete().eq('user_id', user.id).eq('local_id', id);
+      } catch (err) {
+        console.error("Failed to delete remote log:", err);
+      }
+    }
+
     setToast({
       message: 'Запись удалена',
       isVisible: true,
-      onUndo: () => db.logs.add(log)
+      onUndo: async () => {
+        const addedId = await db.logs.add(log);
+        // Восстанавливаем в Supabase при отмене удалении
+        if (user?.id) {
+          try {
+            await supabase.from('daily_meals').insert({
+              user_id: user.id,
+              local_id: addedId,
+              meal_type: log.mealType,
+              amount: log.amount,
+              name_ru: log.name_ru,
+              name_en: log.name_en,
+              calories: log.nutrients?.calories || (log as any).calories || 0,
+              protein: log.nutrients?.protein || (log as any).protein || 0,
+              carbs: log.nutrients?.carbs || (log as any).carbs || 0,
+              fat: log.nutrients?.fat || (log as any).fat || 0,
+              timestamp: log.timestamp
+            });
+          } catch (err) {
+            console.error("Failed to restore remote log:", err);
+          }
+        }
+      }
     });
   };
 
   const logsByMeal = (mealId: string) => dayLogs?.filter(l => l.mealType === mealId) || [];
   
-  const totalCals = dayLogs?.reduce((acc, l) => acc + (l.nutrients?.calories || (l as any).calories || 0), 0) || 0;
+  const totalCals = dayLogs?.reduce((acc, l) => {
+    const cals = l.nutrients?.calories ?? (l as any).calories ?? 0;
+    return acc + cals;
+  }, 0) || 0;
 
   if (!profile || !profile.mealStructure || profile.mealStructure.length === 0) {
     return (
@@ -141,7 +174,6 @@ export const Diary: React.FC = () => {
       </div>
 
       <div className="space-y-5">
-
         {profile.mealStructure.map((section) => (
           <div key={section.id} className="glass rounded-[2.5rem] p-6 border-white/60 shadow-lg flex flex-col gap-6 group hover:shadow-xl transition-all">
             <div className="flex justify-between items-center">
@@ -176,7 +208,10 @@ export const Diary: React.FC = () => {
                   <div className="flex items-center gap-2 mt-0.5">
                     <Flame size={12} className="text-rose-500" />
                     <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none">
-                       {Math.round(logsByMeal(section.id).reduce((acc, l) => acc + (l.nutrients?.calories || (l as any).calories || 0), 0))} kcal
+                       {Math.round(logsByMeal(section.id).reduce((acc, l) => {
+                         const cals = l.nutrients?.calories ?? (l as any).calories ?? 0;
+                         return acc + cals;
+                       }, 0))} kcal
                     </span>
                   </div>
                 </div>
@@ -190,30 +225,37 @@ export const Diary: React.FC = () => {
             </div>
 
             <div className="space-y-3">
-              {logsByMeal(section.id).map((log) => (
-                <div key={log.id} className="flex justify-between items-center p-4 bg-white/40 rounded-3xl border border-white/50 group/item hover:bg-white transition-all scroll-m-2">
-                  <div className="flex-1">
-                    <div className="font-black text-[15px] text-gray-900 leading-tight">
-                      {t('common.lang') === 'ru' ? (log.name_ru || log.name_en || (log as any).name) : (log.name_en || log.name_ru || (log as any).name)}
+              {logsByMeal(section.id).map((log) => {
+                const p = log.nutrients?.protein ?? ((log as any).protein ? ((log as any).protein * (log.amount / 100)) : 0);
+                const c = log.nutrients?.carbs ?? ((log as any).carbs ? ((log as any).carbs * (log.amount / 100)) : 0);
+                const f = log.nutrients?.fat ?? ((log as any).fat ? ((log as any).fat * (log.amount / 100)) : 0);
+                const cal = log.nutrients?.calories ?? ((log as any).calories ? ((log as any).calories * (log.amount / 100)) : 0);
+
+                return (
+                  <div key={log.id} className="flex justify-between items-center p-4 bg-white/40 rounded-3xl border border-white/50 group/item hover:bg-white transition-all scroll-m-2">
+                    <div className="flex-1">
+                      <div className="font-black text-[15px] text-gray-900 leading-tight">
+                        {t('common.lang') === 'ru' ? (log.name_ru || log.name_en || (log as any).name) : (log.name_en || log.name_ru || (log as any).name)}
+                      </div>
+                      <div className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-wider flex items-center gap-2">
+                        <span className="text-primary-600 bg-primary-100/50 px-1.5 py-0.5 rounded-md">{Math.round(log.amount)}g</span>
+                        <span>P: {Math.round(p)}g</span>
+                        <span>C: {Math.round(c)}g</span>
+                        <span>F: {Math.round(f)}g</span>
+                      </div>
                     </div>
-                    <div className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-wider flex items-center gap-2">
-                      <span className="text-primary-600 bg-primary-100/50 px-1.5 py-0.5 rounded-md">{Math.round(log.amount)}g</span>
-                      <span>P: {Math.round(log.nutrients?.protein ?? ((log as any).protein * (log.amount / 100)) ?? 0)}g</span>
-                      <span>C: {Math.round(log.nutrients?.carbs ?? ((log as any).carbs * (log.amount / 100)) ?? 0)}g</span>
-                      <span>F: {Math.round(log.nutrients?.fat ?? ((log as any).fat * (log.amount / 100)) ?? 0)}g</span>
+                    <div className="flex items-center gap-4">
+                       <div className="text-sm font-black text-gray-900 whitespace-nowrap">
+                        {Math.round(cal)} <span className="text-[10px] font-bold text-gray-400">kcal</span>
+                        </div>
+                       <div className="flex gap-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                          <button onClick={() => handleEditClick(log)} className="p-2 text-gray-300 hover:text-primary-500 hover:bg-primary-50 rounded-xl transition-all"><Edit2 size={16} /></button>
+                          <button onClick={() => deleteLog(log.id!)} className="p-2 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={16} /></button>
+                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                     <div className="text-sm font-black text-gray-900 whitespace-nowrap">
-                       {Math.round(log.nutrients?.calories ?? ((log as any).calories * (log.amount / 100)) ?? 0)} <span className="text-[10px] font-bold text-gray-400">kcal</span>
-                     </div>
-                     <div className="flex gap-1 opacity-0 group-hover/item:opacity-100 transition-opacity">
-                        <button onClick={() => handleEditClick(log)} className="p-2 text-gray-300 hover:text-primary-500 hover:bg-primary-50 rounded-xl transition-all"><Edit2 size={16} /></button>
-                        <button onClick={() => deleteLog(log.id!)} className="p-2 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"><Trash2 size={16} /></button>
-                     </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {logsByMeal(section.id).length === 0 && (
                 <div className="text-center py-6 bg-white/30 rounded-[2rem] border-2 border-dashed border-white/40 group-hover:border-primary-100/50 transition-colors">
                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{t('diary.no_logs')}</p>
@@ -276,4 +318,3 @@ export const Diary: React.FC = () => {
     </div>
   );
 };
-

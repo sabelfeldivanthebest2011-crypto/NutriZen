@@ -686,7 +686,7 @@ export const FoodSearchModal: React.FC<{
                    </div>
 
                    <button 
-                    onClick={() => handleSaveLog((selectedFood || editingLog)!, customAmount)}
+                    onClick={() => handleSaveLog((selectedFood || editingLog) as any, customAmount)}
                     className="w-full bg-black text-white rounded-[1.5rem] py-5 font-black text-lg shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2"
                   >
                     {editingLog ? t('diary.update_entry') : t('diary.add_to_diary')}

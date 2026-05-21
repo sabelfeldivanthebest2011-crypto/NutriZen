@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Component, ReactNode } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { useStore } from './store/useStore';
 import { Onboarding } from './components/Onboarding';
 import { Dashboard } from './components/Dashboard';
@@ -11,7 +11,7 @@ import { MealStructureSettings } from './components/MealStructureSettings';
 import { WeightMiniBook } from './components/WeightMiniBook';
 import { Navigation } from './components/Navigation';
 import { WelcomeScreen } from './components/WelcomeScreen';
-import { PrivacyPolicy } from './components/PrivacyPolicy'; // Импорт новой страницы
+import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { seedDatabase } from './db/db';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from './lib/supabase';
@@ -19,7 +19,6 @@ import { AuthUI } from './components/Auth';
 import { syncData } from './lib/sync';
 import { Loader2 } from 'lucide-react';
 
-// ... ErrorBoundary остается без изменений ...
 class ErrorBoundary extends Component<any, any> {
   constructor(props: any) {
     super(props);
@@ -45,6 +44,8 @@ class ErrorBoundary extends Component<any, any> {
 
 export default function App() {
   const { isOnboarded, activeTab, setActiveTab, profile, user, setUser } = useStore();
+  const store = useStore() as any; 
+  
   const [subView, setSubView] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showWelcome, setShowWelcome] = useState<boolean | null>(null);
@@ -61,17 +62,100 @@ export default function App() {
 
   useEffect(() => {
     seedDatabase();
-    supabase.auth.getSession().then(({ data: { session } }) => {
+
+    const checkUserProfileInDatabase = async (userId: string) => {
+      try {
+        const { data: userProfile } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+
+        if (userProfile && userProfile.is_onboarded) {
+          localStorage.setItem('onboardingCompleted', 'true');
+          setShowWelcome(false);
+
+          if (typeof store.setIsOnboarded === 'function') store.setIsOnboarded(true);
+          else if (typeof store.setOnboarded === 'function') store.setOnboarded(true);
+
+          if (typeof store.setProfile === 'function') {
+            store.setProfile({
+              ...store.profile,
+              ...userProfile,
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching remote user profile:", err);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+
+    const checkAndAuthTelegramUser = async () => {
+      const tg = window.Telegram?.WebApp;
+
+      if (tg && tg.initDataUnsafe?.user) {
+        tg.ready();
+        tg.expand();
+
+        const tgUser = tg.initDataUnsafe.user;
+        const tgEmail = `tg_${tgUser.id}@nutrizen.bot`;
+        const tgPassword = `tg_pass_secure_${tgUser.id}`;
+
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: tgEmail,
+          password: tgPassword,
+        });
+
+        if (signInError) {
+          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+            email: tgEmail,
+            password: tgPassword,
+            options: {
+              data: {
+                display_name: tgUser.first_name,
+                username: tgUser.username || '',
+              }
+            }
+          });
+
+          if (signUpError) {
+            console.error("Telegram Auto-Signup Error:", signUpError.message);
+            setAuthLoading(false);
+          } else if (signUpData?.user) {
+            setUser(signUpData.user);
+            setAuthLoading(false);
+          }
+        } else if (signInData?.user) {
+          setUser(signInData.user);
+          await checkUserProfileInDatabase(signInData.user.id);
+          syncData();
+        }
+      } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          await checkUserProfileInDatabase(session.user.id);
+          syncData();
+        } else {
+          setAuthLoading(false);
+        }
+      }
+    };
+
+    checkAndAuthTelegramUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
-      setAuthLoading(false);
-      if (session?.user) syncData();
+      if (session?.user) {
+        await checkUserProfileInDatabase(session.user.id);
+        syncData();
+      } else {
+        setAuthLoading(false);
+      }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setAuthLoading(false);
-      if (session?.user) syncData();
-    });
     return () => subscription.unsubscribe();
   }, [setUser]);
 
@@ -97,7 +181,7 @@ export default function App() {
       case 'goals': return <GoalsEditor onBack={() => setSubView(null)} />;
       case 'meal-structure': return <MealStructureSettings onBack={() => setSubView(null)} />;
       case 'weight-guide': return <WeightMiniBook onBack={() => setSubView(null)} />;
-      case 'privacy': return <PrivacyPolicy onBack={() => setSubView(null)} />; // ИСПРАВЛЕНО
+      case 'privacy': return <PrivacyPolicy onBack={() => setSubView(null)} />;
       case null: return null;
       default: return null;
     }
@@ -111,7 +195,6 @@ export default function App() {
       <main className="max-w-md mx-auto px-4 pt-8">
         <ErrorBoundary>
           <AnimatePresence mode="wait">
-             {/* ... остальной код рендеринга табов (home, diary, analytics, profile) остается прежним ... */}
              {activeTab === 'home' && <motion.div key="home"><Dashboard onNavigate={setSubView} /></motion.div>}
              {activeTab === 'diary' && <motion.div key="diary"><Diary /></motion.div>}
              {activeTab === 'analytics' && <motion.div key="analytics"><Analytics /></motion.div>}

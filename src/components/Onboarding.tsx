@@ -7,11 +7,12 @@ import { useTranslation } from '../lib/useTranslation';
 import { WheelPicker, WeightSlider } from './ui/Selectors';
 import { CalorieGuide } from './CalorieGuide';
 import { WEIGHT_STEP, snapWeight } from '../lib/constants';
+import { supabase } from '../lib/supabase'; // Импортируем клиент Supabase
 
 export const Onboarding: React.FC = () => {
   const [step, setStep] = useState(0);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
-  const { setProfile, profile, updateTargetValue, calculatedTargets, confirmOnboarding } = useStore();
+  const { setProfile, profile, updateTargetValue, calculatedTargets, confirmOnboarding, user } = useStore();
   const { lang } = useTranslation();
 
   const [isEditingCal, setIsEditingCal] = useState(false);
@@ -580,6 +581,38 @@ export const Onboarding: React.FC = () => {
     if (step < steps.length - 1) {
       setStep(step + 1);
     } else {
+      // Сохраняем анкету в Supabase перед завершением онбординга
+      if (user?.id) {
+        try {
+          await supabase.from('user_profiles').upsert({
+            id: user.id,
+            name: profile.name,
+            gender: profile.gender,
+            weight: profile.weight,
+            goal: profile.goal,
+            target_weight: profile.targetWeight,
+            speed_kgs_per_week: profile.speedKgsPerWeek,
+            protein_per_kg: profile.proteinPerKg,
+            height: profile.height,
+            birth_date: profile.birthDate,
+            age: profile.age,
+            body_fat: profile.bodyFat,
+            training_type: profile.trainingType,
+            training_frequency: profile.trainingFrequency,
+            has_cardio: profile.hasCardio,
+            cardio_frequency: profile.cardioFrequency,
+            experience_level: profile.experienceLevel,
+            steps_range: profile.stepsRange,
+            lifestyle: profile.lifestyle,
+            is_onboarded: true,
+            updated_at: new Date().toISOString()
+          });
+        } catch (error) {
+          console.error("Failed to save remote profile:", error);
+        }
+      }
+      
+      // Запускаем стандартное завершение в сторе
       await confirmOnboarding();
     }
   };
