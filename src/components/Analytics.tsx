@@ -343,7 +343,7 @@ const WeightSection: React.FC = () => {
                     contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
                     itemStyle={{ fontWeight: 800, fontSize: '12px' }}
                     labelStyle={{ fontWeight: 800, fontSize: '10px', textTransform: 'uppercase', color: '#9CA3AF' }}
-                    formatter={(val: number) => [val.toFixed(1), '']}
+                    formatter={((val: any) => [String(val), '']) as any}
                   />
                   <Line 
                     type="monotone" 
